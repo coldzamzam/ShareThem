@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_shareit/scaffolds/home_page.dart';
+import 'package:flutter_shareit/scaffolds/login_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -15,7 +16,8 @@ class MyApp extends StatelessWidget {
       title: 'Flutter Demo',
       initialRoute: '/',
       routes: {
-        '/': (context) => HomePage()
+        '/': (_) => HomePage(),
+        '/login': (_) => LoginPage()
       },
       theme: ThemeData(
         // This is the theme of your application.
@@ -33,7 +35,7 @@ class MyApp extends StatelessWidget {
         //
         // This works for code too, not just values: Most code changes can be
         // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.purpleAccent),
         useMaterial3: true
       ),
       debugShowCheckedModeBanner: false

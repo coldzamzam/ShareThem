@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_shareit/screens/receive_screen.dart';
 import 'package:flutter_shareit/screens/send_screen.dart';
+import 'package:flutter_shareit/screens/settings_screen.dart';
 
 // The main screen of the application, featuring a Scaffold with responsive navigation.
 class HomePage extends StatefulWidget {
@@ -12,11 +13,11 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex =
-      0; // Keeps track of the currently selected navigation item.
+  int _lockingIndex = 0;
+  int _selectedIndex = 0; // Keeps track of the currently selected navigation item.
 
   // Define the navigation destinations for both NavigationRail and BottomNavigationBar.
-  static const List<NavigationDestination> _destinations =
+  static final List<NavigationDestination> _destinations =
       <NavigationDestination>[
         NavigationDestination(
           selectedIcon: Icon(Icons.upload, color: Colors.lightBlue),
@@ -30,19 +31,42 @@ class _HomePageState extends State<HomePage> {
         ),
       ];
 
-  // List of widgets to display in the body based on the selected index.
-  static const List<Widget> _widgets = <Widget>[SendScreen(), ReceiveScreen()];
-
   // Function to update the selected index.
   void _onNavigation(int index) {
     setState(() {
+      if (index < _destinations.length) {
+        _lockingIndex = index;
+      }
       _selectedIndex = index;
     });
+  }
+
+  void _openSettings() {
+    setState(() {
+      _selectedIndex = _destinations.length;
+    });
+  }
+
+  void _closeSettings() {
+    setState(() {
+      _selectedIndex = _lockingIndex;
+    });
+  }
+
+  @override
+  void dispose() {
+    print("HomePage disposed");
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isWideScreen = MediaQuery.of(context).size.width > 1000.0;
+    final List<Widget> widgets = <Widget>[
+      SendScreen(),
+      ReceiveScreen(),
+      SettingsScreen(onClose: isWideScreen ? null : _closeSettings),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -51,7 +75,13 @@ class _HomePageState extends State<HomePage> {
           'ShareThem',
           style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
         ),
-        actions: [IconButton(icon: Icon(Icons.person), color: Theme.of(context).colorScheme.onPrimary, onPressed: () {})],
+        actions: [
+          IconButton(
+            icon: Icon(Icons.settings),
+            color: Theme.of(context).colorScheme.onPrimary,
+            onPressed: _openSettings,
+          ),
+        ],
         // No leading icon needed for NavigationRail as it's always visible.
       ),
       body: Row(
@@ -67,7 +97,9 @@ class _HomePageState extends State<HomePage> {
                 ...(_destinations.mapIndexed(
                   (i, e) => NavigationDrawerDestination(
                     icon: e.icon,
+                    selectedIcon: e.selectedIcon,
                     label: Text(e.label),
+                    enabled: e.enabled,
                   ),
                 )),
                 Padding(padding: EdgeInsets.only(bottom: 10)),
@@ -77,12 +109,12 @@ class _HomePageState extends State<HomePage> {
           if (isWideScreen) const VerticalDivider(thickness: 1, width: 1),
 
           // The main content of the screen, taking up the remaining space.
-          Expanded(child: _widgets[_selectedIndex]),
+          Expanded(child: widgets[_selectedIndex]),
         ],
       ),
       // Conditionally render the BottomNavigationBar for narrow screens.
       bottomNavigationBar:
-          isWideScreen
+          (isWideScreen || _selectedIndex >= _destinations.length)
               ? null // No bottom navigation bar if it's a wide screen (using NavigationRail).
               : NavigationBarTheme(
                 data: const NavigationBarThemeData(
@@ -92,11 +124,7 @@ class _HomePageState extends State<HomePage> {
                   animationDuration: const Duration(seconds: 1),
                   labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                   selectedIndex: _selectedIndex,
-                  onDestinationSelected: (int index) {
-                    setState(() {
-                      _selectedIndex = index;
-                    });
-                  },
+                  onDestinationSelected: _onNavigation,
                   destinations: _destinations,
                 ),
               ),
