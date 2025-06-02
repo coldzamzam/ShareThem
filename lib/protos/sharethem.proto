@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+message SharedFileSet {
+    repeated SharedFile files = 1;
+}
+
+message SharedFile {
+    string file_name = 1;
+    uint32 file_size = 2;
+    uint32 file_crc = 3;
+}

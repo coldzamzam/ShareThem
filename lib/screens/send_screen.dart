@@ -1,6 +1,10 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'dart:io'; // For File class
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_shareit/protos/sharethem.pb.dart';
+import 'package:flutter_shareit/screens/dialogs/select_receiver_dialog.dart';
+import 'package:flutter_shareit/utils/file_utils.dart';
 import '../utils/sharing_discovery_service.dart'; // Adjust path if needed
 
 class SendScreen extends StatefulWidget {
@@ -11,38 +15,23 @@ class SendScreen extends StatefulWidget {
 }
 
 class _SendScreenState extends State<SendScreen> {
-  SharedFileInfo? _selectedFileInfo;
-  bool _isBroadcasting = false;
+  final Map<String, SharedFile> _selectedFiles = {};
 
-  Future<void> _pickFileAndBroadcast() async {
+  Future<void> _pickFiles() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles();
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
 
-      if (result != null && result.files.single.path != null) {
-        PlatformFile platformFile = result.files.first;
-        File file = File(platformFile.path!);
-        int fileSize = await file.length();
-
+      if (result != null) {
         setState(() {
-          _selectedFileInfo = SharedFileInfo(
-            name: platformFile.name,
-            size: fileSize,
-            path: platformFile.path,
-          );
+          for (var file in result.files) {
+            _selectedFiles[file.path!] = SharedFile(
+              fileName: file.name,
+              fileSize: file.size,
+              fileCrc: file.hashCode,
+            );
+          }
         });
-
-        await SharingDiscoveryService.beginBroadcast(_selectedFileInfo!);
-        setState(() {
-          _isBroadcasting = SharingDiscoveryService.isBroadcasting;
-        });
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Broadcasting file: ${_selectedFileInfo!.name}'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        print(_selectedFiles.values.map((x) => x.toProto3Json()));
       } else {
         // User canceled the picker
         if (!mounted) return;
@@ -65,33 +54,6 @@ class _SendScreenState extends State<SendScreen> {
     }
   }
 
-  Future<void> _stopBroadcasting() async {
-    await SharingDiscoveryService.stopBroadcast();
-    setState(() {
-      _isBroadcasting = SharingDiscoveryService.isBroadcasting;
-      // _selectedFileInfo = null; // Optionally clear selected file info
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Broadcasting stopped.'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    // Decide if you want to automatically stop broadcasting when SendScreen is disposed
-    // If you want it to persist even if user navigates away (within the app session),
-    // then don't call stopBroadcast() here.
-    // For this example, let's stop it when the screen is disposed.
-    if (_isBroadcasting) {
-      SharingDiscoveryService.stopBroadcast();
-    }
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -100,59 +62,93 @@ class _SendScreenState extends State<SendScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              _isBroadcasting ? Icons.wifi_tethering_off : Icons.upload_file,
+            Icon(Icons.upload_file,
               size: 100,
-              color: _isBroadcasting ? Colors.green : Colors.grey[400],
+              color: Colors.grey[400],
             ),
-            const SizedBox(height: 20),
-            if (_selectedFileInfo != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: Card(
-                  elevation: 2,
-                  child: ListTile(
-                    leading: const Icon(Icons.description),
-                    title: Text(_selectedFileInfo!.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Size: ${(_selectedFileInfo!.size / 1024).toStringAsFixed(2)} KB\nStatus: ${_isBroadcasting ? "Broadcasting" : "Ready to broadcast"}'),
-                    trailing: _isBroadcasting ? const Icon(Icons.check_circle, color: Colors.green) : null,
-                  ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 20.0),
+              child: Card(
+                elevation: 2,
+                child: Column(
+                  children:
+                      _selectedFiles.entries
+                          .map(
+                            (entry) => ListTile(
+                              leading: const Icon(Icons.description),
+                              title: Text(
+                                entry.value.fileName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Size: ${fileSizeToHuman(entry.value.fileSize)}',
+                              ),
+                              trailing: IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedFiles.remove(entry.key);
+                                  });
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
-            if (!_isBroadcasting)
-              ElevatedButton.icon(
-                onPressed: _pickFileAndBroadcast,
-                icon: const Icon(Icons.attach_file),
-                label: const Text(
-                  'Select File & Start Broadcasting',
-                  style: TextStyle(fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            ),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 20,
+              runSpacing: 10,
+              children: [
+                if (!SharingDiscoveryService.isSearching)
+                  ElevatedButton.icon(
+                    onPressed: _pickFiles,
+                    icon: const Icon(Icons.attach_file),
+                    label: Text(
+                      _selectedFiles.isNotEmpty ? 'Add More Files' : 'Select Files',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 15,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            if (_isBroadcasting)
-              ElevatedButton.icon(
-                onPressed: _stopBroadcasting,
-                icon: const Icon(Icons.stop_circle_outlined),
-                label: const Text(
-                  'Stop Broadcasting',
-                  style: TextStyle(fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                if (_selectedFiles.isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final receiver = await showSelectReceiverDialog(context: context);
+                    },
+                    icon: const Icon(Icons.send),
+                    label: const Text(
+                      'Send Files',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 30,
+                        vertical: 15,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    ),
                   ),
-                ),
-              ),
+              ],
+            ),
             const SizedBox(height: 40),
             const Text(
-              'Select a file to make it discoverable by other devices on the network.',
+              'Select a file to send to other devices.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey),
             ),
