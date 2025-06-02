@@ -1,8 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_shareit/scaffolds/home_page.dart';
 import 'package:flutter_shareit/scaffolds/login_page.dart';
+import 'package:firebase_core/firebase_core.dart'; 
+import 'package:flutter_shareit/firebase_options.dart'; 
 
-void main() {
+void main() async{
+// Ensure Flutter widgets are initialized
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Now you can run your app
   runApp(const MyApp());
 }
 
@@ -17,7 +28,9 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (_) => HomePage(),
-        '/login': (_) => LoginPage()
+        '/login': (_) => LoginPage(),
+        '/home': (_) => HomePage()
+
       },
       theme: ThemeData(
         // This is the theme of your application.
