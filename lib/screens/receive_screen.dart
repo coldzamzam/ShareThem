@@ -13,7 +13,7 @@ class ReceiveScreen extends StatefulWidget {
 
 class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _discoverable = SharingDiscoveryService.isDiscoverable;
-  List<SharedFile> _sharedFiles = [];
+  List<(SharedFile, int)> _sharedFiles = [];
   bool _receivingBegun = false;
   late FileSharingReceiver _receiver;
 
@@ -79,13 +79,15 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       return ListTile(
                         leading: const Icon(Icons.description),
                         title: Text(
-                          _sharedFiles[i].fileName,
+                          _sharedFiles[i].$1.fileName,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Text(
-                          'Size: ${fileSizeToHuman(_sharedFiles[i].fileSize)}',
+                          'Size: ${fileSizeToHuman(_sharedFiles[i].$1.fileSize)}',
                         ),
-                        trailing: Text("0%"),
+                        trailing: Text(
+                          "${((_sharedFiles[i].$2 / _sharedFiles[i].$1.fileSize) * 100).toStringAsFixed(2)}%",
+                        ),
                       );
                     },
                   ),

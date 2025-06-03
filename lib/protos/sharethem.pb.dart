@@ -16,6 +16,66 @@ import 'package:protobuf/protobuf.dart' as $pb;
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
+class SharedFileContentNotify extends $pb.GeneratedMessage {
+  factory SharedFileContentNotify({
+    SharedFile? file,
+    $core.List<$core.int>? content,
+  }) {
+    final result = create();
+    if (file != null) result.file = file;
+    if (content != null) result.content = content;
+    return result;
+  }
+
+  SharedFileContentNotify._();
+
+  factory SharedFileContentNotify.fromBuffer($core.List<$core.int> data, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(data, registry);
+  factory SharedFileContentNotify.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'SharedFileContentNotify', createEmptyInstance: create)
+    ..aOM<SharedFile>(1, _omitFieldNames ? '' : 'file', subBuilder: SharedFile.create)
+    ..a<$core.List<$core.int>>(4, _omitFieldNames ? '' : 'content', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false
+  ;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SharedFileContentNotify clone() => SharedFileContentNotify()..mergeFromMessage(this);
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SharedFileContentNotify copyWith(void Function(SharedFileContentNotify) updates) => super.copyWith((message) => updates(message as SharedFileContentNotify)) as SharedFileContentNotify;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SharedFileContentNotify create() => SharedFileContentNotify._();
+  @$core.override
+  SharedFileContentNotify createEmptyInstance() => create();
+  static $pb.PbList<SharedFileContentNotify> createRepeated() => $pb.PbList<SharedFileContentNotify>();
+  @$core.pragma('dart2js:noInline')
+  static SharedFileContentNotify getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<SharedFileContentNotify>(create);
+  static SharedFileContentNotify? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SharedFile get file => $_getN(0);
+  @$pb.TagNumber(1)
+  set file(SharedFile value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasFile() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearFile() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SharedFile ensureFile() => $_ensure(0);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get content => $_getN(1);
+  @$pb.TagNumber(4)
+  set content($core.List<$core.int> value) => $_setBytes(1, value);
+  @$pb.TagNumber(4)
+  $core.bool hasContent() => $_has(1);
+  @$pb.TagNumber(4)
+  void clearContent() => $_clearField(4);
+}
+
 class GetSharedFilesRsp extends $pb.GeneratedMessage {
   factory GetSharedFilesRsp({
     $core.Iterable<SharedFile>? files,

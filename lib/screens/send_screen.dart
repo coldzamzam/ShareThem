@@ -1,10 +1,16 @@
+import 'dart:io';
+
+import 'package:archive/archive.dart';
 import 'package:bonsoir/bonsoir.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
 import 'package:flutter_shareit/screens/dialogs/select_receiver_dialog.dart';
 import 'package:flutter_shareit/utils/file_sharing/file_sharing_sender.dart';
 import 'package:flutter_shareit/utils/file_utils.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../utils/sharing_discovery_service.dart'; // Adjust path if needed
 
 class SendScreen extends StatefulWidget {
@@ -15,24 +21,52 @@ class SendScreen extends StatefulWidget {
 }
 
 class _SendScreenState extends State<SendScreen> {
-  final Map<String, SharedFile> _selectedFiles = {};
+  bool _loading = false;
+  final List<(SharedFile, Stream<List<int>>)> _selectedFiles = [];
   FileSharingSender? fileSharingSender;
 
   Future<void> _pickFiles() async {
     try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        withReadStream: true,
+      );
 
       if (result != null) {
         setState(() {
-          for (var file in result.files) {
-            _selectedFiles[file.path!] = SharedFile(
-              fileName: file.name,
-              fileSize: file.size,
-              fileCrc: file.hashCode,
-            );
-          }
+          _loading = true;
         });
-        print(_selectedFiles.values.map((x) => x.toProto3Json()));
+
+        final tmpDir = p.join((await getTemporaryDirectory()).uri.toFilePath(), "send_cache");
+        if (!Directory(tmpDir).existsSync()) {
+          Directory(tmpDir).create();
+        }
+
+        for (var file in result.files) {
+          final tmpFile = p.join(tmpDir, file.name);
+          final crc = Crc32();
+          final fFile = File(file.path!);
+
+          final ws = File(tmpFile).openWrite();
+          await for (final chunk in fFile.openRead()) {
+            crc.add(chunk);
+            ws.add(chunk);
+          }
+          await ws.close();
+
+          print("done crc: ${crc.hash}");
+
+          setState(() {
+            _selectedFiles.add((
+              SharedFile(
+                fileName: file.name,
+                fileSize: file.size,
+                fileCrc: crc.hash,
+              ),
+              File(tmpFile).openRead(),
+            ));
+          });
+        }
       } else {
         // User canceled the picker
         if (!mounted) return;
@@ -52,6 +86,8 @@ class _SendScreenState extends State<SendScreen> {
           duration: const Duration(seconds: 3),
         ),
       );
+    } finally {
+      _loading = false;
     }
   }
 
@@ -70,30 +106,39 @@ class _SendScreenState extends State<SendScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.upload_file, size: 100, color: Colors.grey[400]),
+            _loading
+                ? Padding(
+                    padding: EdgeInsetsGeometry.all(10),
+                    child: SizedBox(
+                      height: 80,
+                      width: 80,
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                : Icon(Icons.upload_file, size: 100, color: Colors.grey[400]),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: Card(
                   elevation: 2,
                   child: ListView(
-                    children: _selectedFiles.entries
-                        .map(
-                          (entry) => ListTile(
+                    children: _selectedFiles
+                        .mapIndexed(
+                          (i, entry) => ListTile(
                             leading: const Icon(Icons.description),
                             title: Text(
-                              entry.value.fileName,
+                              entry.$1.fileName,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             subtitle: Text(
-                              'Size: ${fileSizeToHuman(entry.value.fileSize)}',
+                              'Size: ${fileSizeToHuman(entry.$1.fileSize)}',
                             ),
                             trailing: IconButton(
                               onPressed: () {
                                 setState(() {
-                                  _selectedFiles.remove(entry.key);
+                                  _selectedFiles.removeAt(i);
                                 });
                               },
                               icon: const Icon(Icons.close),
@@ -130,7 +175,7 @@ class _SendScreenState extends State<SendScreen> {
                       ),
                     ),
                   ),
-                if (_selectedFiles.isNotEmpty)
+                if (_selectedFiles.isNotEmpty && !_loading)
                   ElevatedButton.icon(
                     onPressed: () async {
                       final receiver = await showSelectReceiverDialog(

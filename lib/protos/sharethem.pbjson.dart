@@ -14,6 +14,20 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
+@$core.Deprecated('Use sharedFileContentNotifyDescriptor instead')
+const SharedFileContentNotify$json = {
+  '1': 'SharedFileContentNotify',
+  '2': [
+    {'1': 'file', '3': 1, '4': 1, '5': 11, '6': '.SharedFile', '10': 'file'},
+    {'1': 'content', '3': 4, '4': 1, '5': 12, '10': 'content'},
+  ],
+};
+
+/// Descriptor for `SharedFileContentNotify`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List sharedFileContentNotifyDescriptor = $convert.base64Decode(
+    'ChdTaGFyZWRGaWxlQ29udGVudE5vdGlmeRIfCgRmaWxlGAEgASgLMgsuU2hhcmVkRmlsZVIEZm'
+    'lsZRIYCgdjb250ZW50GAQgASgMUgdjb250ZW50');
+
 @$core.Deprecated('Use getSharedFilesRspDescriptor instead')
 const GetSharedFilesRsp$json = {
   '1': 'GetSharedFilesRsp',

@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:flutter_shareit/protos/packettype.pb.dart';
+import 'package:flutter_shareit/protos/packet.pb.dart';
 
 ByteData makePacket(EPacketType type, {Uint8List? payload}) {
   final payloadLen = payload?.length ?? 0;

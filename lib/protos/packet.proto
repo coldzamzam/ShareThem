@@ -6,4 +6,5 @@ enum EPacketType {
     None = 0;
     GetSharedFilesReq = 1;
     GetSharedFilesRsp = 2;
+    SharedFileContentNotify = 3;
 }

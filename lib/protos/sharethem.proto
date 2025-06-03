@@ -1,5 +1,10 @@
 syntax = "proto3";
 
+message SharedFileContentNotify {
+    SharedFile file = 1;
+    bytes content = 4;
+}
+
 message GetSharedFilesRsp {
     repeated SharedFile files = 1;
 }
