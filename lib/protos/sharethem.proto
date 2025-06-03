@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-message SharedFileSet {
+message GetSharedFilesRsp {
     repeated SharedFile files = 1;
 }
 

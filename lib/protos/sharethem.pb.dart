@@ -16,8 +16,8 @@ import 'package:protobuf/protobuf.dart' as $pb;
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
 
-class SharedFileSet extends $pb.GeneratedMessage {
-  factory SharedFileSet({
+class GetSharedFilesRsp extends $pb.GeneratedMessage {
+  factory GetSharedFilesRsp({
     $core.Iterable<SharedFile>? files,
   }) {
     final result = create();
@@ -25,32 +25,32 @@ class SharedFileSet extends $pb.GeneratedMessage {
     return result;
   }
 
-  SharedFileSet._();
+  GetSharedFilesRsp._();
 
-  factory SharedFileSet.fromBuffer($core.List<$core.int> data, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(data, registry);
-  factory SharedFileSet.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(json, registry);
+  factory GetSharedFilesRsp.fromBuffer($core.List<$core.int> data, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromBuffer(data, registry);
+  factory GetSharedFilesRsp.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) => create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'SharedFileSet', createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'GetSharedFilesRsp', createEmptyInstance: create)
     ..pc<SharedFile>(1, _omitFieldNames ? '' : 'files', $pb.PbFieldType.PM, subBuilder: SharedFile.create)
     ..hasRequiredFields = false
   ;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  SharedFileSet clone() => SharedFileSet()..mergeFromMessage(this);
+  GetSharedFilesRsp clone() => GetSharedFilesRsp()..mergeFromMessage(this);
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  SharedFileSet copyWith(void Function(SharedFileSet) updates) => super.copyWith((message) => updates(message as SharedFileSet)) as SharedFileSet;
+  GetSharedFilesRsp copyWith(void Function(GetSharedFilesRsp) updates) => super.copyWith((message) => updates(message as GetSharedFilesRsp)) as GetSharedFilesRsp;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
 
   @$core.pragma('dart2js:noInline')
-  static SharedFileSet create() => SharedFileSet._();
+  static GetSharedFilesRsp create() => GetSharedFilesRsp._();
   @$core.override
-  SharedFileSet createEmptyInstance() => create();
-  static $pb.PbList<SharedFileSet> createRepeated() => $pb.PbList<SharedFileSet>();
+  GetSharedFilesRsp createEmptyInstance() => create();
+  static $pb.PbList<GetSharedFilesRsp> createRepeated() => $pb.PbList<GetSharedFilesRsp>();
   @$core.pragma('dart2js:noInline')
-  static SharedFileSet getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<SharedFileSet>(create);
-  static SharedFileSet? _defaultInstance;
+  static GetSharedFilesRsp getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<GetSharedFilesRsp>(create);
+  static GetSharedFilesRsp? _defaultInstance;
 
   @$pb.TagNumber(1)
   $pb.PbList<SharedFile> get files => $_getList(0);

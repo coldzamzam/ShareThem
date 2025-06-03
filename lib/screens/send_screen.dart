@@ -1,9 +1,9 @@
-import 'package:collection/collection.dart';
+import 'package:bonsoir/bonsoir.dart';
 import 'package:flutter/material.dart';
-import 'dart:io'; // For File class
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
 import 'package:flutter_shareit/screens/dialogs/select_receiver_dialog.dart';
+import 'package:flutter_shareit/utils/file_sharing/file_sharing_sender.dart';
 import 'package:flutter_shareit/utils/file_utils.dart';
 import '../utils/sharing_discovery_service.dart'; // Adjust path if needed
 
@@ -16,6 +16,7 @@ class SendScreen extends StatefulWidget {
 
 class _SendScreenState extends State<SendScreen> {
   final Map<String, SharedFile> _selectedFiles = {};
+  FileSharingSender? fileSharingSender;
 
   Future<void> _pickFiles() async {
     try {
@@ -43,7 +44,7 @@ class _SendScreenState extends State<SendScreen> {
         );
       }
     } catch (e) {
-      print("Error picking file or starting broadcast: $e");
+      print("Error picking file: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -55,6 +56,13 @@ class _SendScreenState extends State<SendScreen> {
   }
 
   @override
+  void dispose() {
+    SharingDiscoveryService.stopDiscovery();
+    fileSharingSender?.stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
@@ -62,40 +70,38 @@ class _SendScreenState extends State<SendScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.upload_file,
-              size: 100,
-              color: Colors.grey[400],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20.0),
-              child: Card(
-                elevation: 2,
-                child: Column(
-                  children:
-                      _selectedFiles.entries
-                          .map(
-                            (entry) => ListTile(
-                              leading: const Icon(Icons.description),
-                              title: Text(
-                                entry.value.fileName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              subtitle: Text(
-                                'Size: ${fileSizeToHuman(entry.value.fileSize)}',
-                              ),
-                              trailing: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedFiles.remove(entry.key);
-                                  });
-                                },
-                                icon: const Icon(Icons.close),
+            Icon(Icons.upload_file, size: 100, color: Colors.grey[400]),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: Card(
+                  elevation: 2,
+                  child: ListView(
+                    children: _selectedFiles.entries
+                        .map(
+                          (entry) => ListTile(
+                            leading: const Icon(Icons.description),
+                            title: Text(
+                              entry.value.fileName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          )
-                          .toList(),
+                            subtitle: Text(
+                              'Size: ${fileSizeToHuman(entry.value.fileSize)}',
+                            ),
+                            trailing: IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedFiles.remove(entry.key);
+                                });
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ),
               ),
             ),
@@ -109,7 +115,9 @@ class _SendScreenState extends State<SendScreen> {
                     onPressed: _pickFiles,
                     icon: const Icon(Icons.attach_file),
                     label: Text(
-                      _selectedFiles.isNotEmpty ? 'Add More Files' : 'Select Files',
+                      _selectedFiles.isNotEmpty
+                          ? 'Add More Files'
+                          : 'Select Files',
                       style: const TextStyle(fontSize: 16),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -125,7 +133,27 @@ class _SendScreenState extends State<SendScreen> {
                 if (_selectedFiles.isNotEmpty)
                   ElevatedButton.icon(
                     onPressed: () async {
-                      final receiver = await showSelectReceiverDialog(context: context);
+                      final receiver = await showSelectReceiverDialog(
+                        context: context,
+                      );
+                      print("select receiver dialog ret: $receiver");
+                      if (receiver is ResolvedBonsoirService) {
+                        fileSharingSender = FileSharingSender(
+                          files: _selectedFiles,
+                          serverHost: receiver.host!,
+                          serverPort: receiver.port,
+                        );
+                        print("starting filesharingsender");
+                        await fileSharingSender?.start();
+                      } else if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Select a receiver first!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                      await SharingDiscoveryService.stopDiscovery();
                     },
                     icon: const Icon(Icons.send),
                     label: const Text(

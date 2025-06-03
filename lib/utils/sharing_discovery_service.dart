@@ -1,17 +1,21 @@
 import 'package:bonsoir/bonsoir.dart';
 import 'dart:async';
 
+import 'package:uuid/uuid.dart';
+
 class SharingDiscoveryService {
+  static final String _sessionId = Uuid().v7();
+
   static bool isDiscoverable = false;
   static bool isSearching = false;
 
-  static const String _serviceType = '_sharing-service._tcp';
-  static const int _servicePort = 48230;
+  static const String serviceType = '_sharing-service._tcp';
+  static const int servicePort = 48230;
 
   static BonsoirBroadcast? _broadcaster;
   static BonsoirService? _currentBroadcastService;
 
-  static BonsoirDiscovery _discovery = BonsoirDiscovery(type: _serviceType);
+  static BonsoirDiscovery _discovery = BonsoirDiscovery(type: serviceType);
 
   static final StreamController<BonsoirService> _resolvedServiceController =
       StreamController<BonsoirService>.broadcast();
@@ -19,15 +23,20 @@ class SharingDiscoveryService {
   static Stream<BonsoirService> get resolvedServiceStream =>
       _resolvedServiceController.stream;
 
-  static Future<void> beginBroadcast({String deviceName = "Unknown Device"}) async {
+  static Future<void> beginBroadcast({
+    String deviceName = "Unknown Device",
+  }) async {
     if (isDiscoverable) {
       await stopBroadcast();
     }
 
     _currentBroadcastService = BonsoirService(
       name: deviceName,
-      type: _serviceType,
-      port: _servicePort
+      type: serviceType,
+      port: servicePort,
+      attributes: {
+        "sessionId": _sessionId
+      }
     );
 
     _broadcaster = BonsoirBroadcast(service: _currentBroadcastService!);
@@ -49,13 +58,17 @@ class SharingDiscoveryService {
     }
   }
 
+  static Future<void> resolveService(BonsoirService service) async {
+    await _discovery.serviceResolver.resolveService(service);
+  }
+
   static Future<Stream<BonsoirDiscoveryEvent>?> beginDiscovery() async {
     if (isSearching) {
       print("Discovery already in progress.");
       return _discovery.eventStream;
     }
     if (_discovery.isStopped) {
-      _discovery = BonsoirDiscovery(type: _serviceType);
+      _discovery = BonsoirDiscovery(type: serviceType);
     }
 
     await _discovery.ready;

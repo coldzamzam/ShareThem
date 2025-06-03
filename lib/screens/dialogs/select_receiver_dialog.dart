@@ -10,85 +10,103 @@ Future<dynamic> showSelectReceiverDialog({
     return null;
   }
 
-  BonsoirService? selectedService;
-  final List<BonsoirService> services = [];
+  bool resolving = false;
+  String? selectedService;
+  final Map<String, BonsoirService> services = {};
   final dialog = await showDialog(
     context: context,
     builder: (BuildContext dialogContext) {
-      return AlertDialog(
-        actions: [
-          TextButton(
-            onPressed: () {
-              if (selectedService == null) {
-                showDialog(
-                  context: context,
-                  builder:
-                      (dialogContext) => AlertDialog(
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            child: const Text('Dismiss'),
-                          ),
-                        ],
-                        title: const Text('Error'),
-                        content: const Text('Select a receiver first!'),
-                      ),
-                );
-                return;
-              }
-            },
-            child: Text('Confirm'),
-          ),
-        ],
-        title: const Text('Select Receiver'),
-        insetPadding: EdgeInsets.fromLTRB(25, 125, 25, 125),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              stream.listen((event) {
-                print("event debug: ${event.type}");
-                switch (event.type) {
-                  case BonsoirDiscoveryEventType.discoveryServiceFound:
-                    if (event.service != null) {
-                      setState(() {
-                        services.add(event.service!);
-                      });
-                    }
-                    break;
-                  case BonsoirDiscoveryEventType.discoveryServiceLost:
-                    if (event.service != null) {
-                      setState(() {
-                        services.remove(event.service!);
-                      });
-                    }
-                    break;
-                  default:
-                }
-              });
+      return StatefulBuilder(
+        builder: (_, setState) {
+          stream.listen((event) {
+            print("event debug: ${event.type}");
+            final sessionId = event.service?.attributes["sessionId"];
 
-              return ListView.separated(
-                separatorBuilder: (_, _) => const Divider(),
-                itemCount: services.length,
-                itemBuilder:
-                    (context, index) => ListTile(
-                      title: Text(services[index].name),
-                      onTap: () {
-                        setState(() {
-                          selectedService = services[index];
-                        });
-                      },
-                      selected: selectedService == services[index],
-                    ),
-              );
-            },
-          ),
-        ),
+            switch (event.type) {
+              case BonsoirDiscoveryEventType.discoveryServiceFound:
+                if (event.service != null) {
+                  setState(() {
+                    if (sessionId != null) {
+                      services[sessionId] = event.service!;
+                    }
+                  });
+                }
+                break;
+              case BonsoirDiscoveryEventType.discoveryServiceLost:
+                if (event.service != null) {
+                  setState(() {
+                    services.remove(sessionId);
+                  });
+                }
+                break;
+              case BonsoirDiscoveryEventType.discoveryServiceResolved:
+                if (event.service != null) {
+                  setState(() {
+                    if (sessionId != null) {
+                      services[sessionId] = event.service!;
+                    }
+                    selectedService = sessionId;
+
+                    if (context.mounted && Navigator.canPop(context)) {
+                      Navigator.pop(context, event.service!);
+                    }
+                  });
+                }
+              default:
+            }
+          });
+
+          final servicesKeys = services.keys.toList();
+          return AlertDialog(
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  if (selectedService == null) {
+                    Navigator.pop(context);
+                    return;
+                  }
+
+                  await SharingDiscoveryService.resolveService(
+                    services[selectedService]!,
+                  );
+                  setState(() {
+                    resolving = true;
+                  });
+                },
+                child: Text('Confirm'),
+              ),
+            ],
+            title: const Text('Select Receiver'),
+            insetPadding: EdgeInsets.fromLTRB(25, 125, 25, 125),
+            content: SizedBox(
+              width: double.maxFinite,
+              child:
+                  resolving
+                      ? const SizedBox(
+                        width: 100,
+                        height: 100,
+                        child: CircularProgressIndicator(),
+                      )
+                      : ListView.separated(
+                        separatorBuilder: (_, _) => const Divider(),
+                        itemCount: servicesKeys.length,
+                        itemBuilder:
+                            (context, index) => ListTile(
+                              title: Text(services[servicesKeys[index]]!.name),
+                              onTap: () {
+                                setState(() {
+                                  selectedService = servicesKeys[index];
+                                });
+                              },
+                              selected: selectedService == servicesKeys[index],
+                            ),
+                      ),
+            ),
+          );
+        },
       );
     },
   );
-
-  await SharingDiscoveryService.stopDiscovery();
 
   return dialog;
 }

@@ -14,17 +14,17 @@ import 'dart:convert' as $convert;
 import 'dart:core' as $core;
 import 'dart:typed_data' as $typed_data;
 
-@$core.Deprecated('Use sharedFileSetDescriptor instead')
-const SharedFileSet$json = {
-  '1': 'SharedFileSet',
+@$core.Deprecated('Use getSharedFilesRspDescriptor instead')
+const GetSharedFilesRsp$json = {
+  '1': 'GetSharedFilesRsp',
   '2': [
     {'1': 'files', '3': 1, '4': 3, '5': 11, '6': '.SharedFile', '10': 'files'},
   ],
 };
 
-/// Descriptor for `SharedFileSet`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List sharedFileSetDescriptor = $convert.base64Decode(
-    'Cg1TaGFyZWRGaWxlU2V0EiEKBWZpbGVzGAEgAygLMgsuU2hhcmVkRmlsZVIFZmlsZXM=');
+/// Descriptor for `GetSharedFilesRsp`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getSharedFilesRspDescriptor = $convert.base64Decode(
+    'ChFHZXRTaGFyZWRGaWxlc1JzcBIhCgVmaWxlcxgBIAMoCzILLlNoYXJlZEZpbGVSBWZpbGVz');
 
 @$core.Deprecated('Use sharedFileDescriptor instead')
 const SharedFile$json = {
