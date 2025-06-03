@@ -25,8 +25,12 @@ class MyApp extends StatelessWidget {
       title: 'Flutter ShareIt',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.purpleAccent),
+        // Menggunakan salah satu warna dari gradient sebagai seedColor
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFAA88CC)),
         useMaterial3: true,
+
+        // 👇 Tambahkan font custom di sini
+        fontFamily: 'Jost',
       ),
       initialRoute: '/',
       routes: {

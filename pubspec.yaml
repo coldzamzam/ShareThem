@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.8.1 <4.0.0'
+  sdk: '>=3.7.2 <3.8.0'
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -92,6 +92,15 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
+  fonts:
+    - family: Jost
+      fonts:
+        - asset: fonts/Jost/Jost-Regular.ttf
+        - asset: fonts/Jost/Jost-Bold.ttf
+          weight: 700
+        - asset: fonts/Jost/Jost-Italic.ttf
+          style: italic
+        - asset: fonts/Jost/Jost-VariableFont_wght.ttf
   # fonts:
   #   - family: Schyler
   #     fonts:
