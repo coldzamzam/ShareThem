@@ -14,11 +14,11 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
 
     // Delay splash screen for 3 seconds, then navigate
-    Future.delayed(const Duration(seconds: 4), () {
+    Future.delayed(const Duration(seconds: 6), () {
       Navigator.pushReplacementNamed(context, '/home');
     });
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
