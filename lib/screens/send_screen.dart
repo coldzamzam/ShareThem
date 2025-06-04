@@ -108,8 +108,8 @@ class _SendScreenState extends State<SendScreen> {
           children: [
             _loading
                 ? Padding(
-                    padding: EdgeInsetsGeometry.all(10),
-                    child: SizedBox(
+                      padding: EdgeInsets.all(10),
+                      child: SizedBox(
                       height: 80,
                       width: 80,
                       child: CircularProgressIndicator(),
