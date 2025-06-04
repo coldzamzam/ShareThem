@@ -1,10 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart'; // ValueChanged
-import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart'; // Added for getDownloadsDirectory
 import 'package:path/path.dart' as p; // Import package path
-import 'package:permission_handler/permission_handler.dart';
-import 'package:file_saver/file_saver.dart'; // Import file_saver
+// import 'package:file_saver/file_saver.dart'; // REMOVED file_saver
 
 // Diasumsikan proto dan packet util ada di path yang benar relatif terhadap file ini
 // Sesuaikan import jika struktur proyek Anda berbeda
@@ -18,7 +17,6 @@ class FileSharingReceiver {
   ValueChanged<List<(SharedFile, int)>>? onFileProgress;
   ValueChanged<String>? onError;
   ValueChanged<List<dynamic>>? onFileReceivedToTemp;
-
 
   List<(SharedFile, int)> _sharedFiles = [];
   ServerSocket? _serverSocket;
@@ -143,7 +141,7 @@ class FileSharingReceiver {
             final packetTypeByte = bytes.getUint8(offset + 4);
             EPacketType? packetType;
             try {
-                 packetType = EPacketType.valueOf(packetTypeByte);
+                packetType = EPacketType.valueOf(packetTypeByte);
             } catch (e) {
                 print("FileSharingReceiver: Unknown EPacketType byte: $packetTypeByte. Skipping.");
                 offset += headerAndPacketLength;
@@ -163,43 +161,35 @@ class FileSharingReceiver {
                   );
                   print("FileSharingReceiver: GetSharedFilesRsp - Received with files: ${filesRsp.files.map((f) => f.fileName).toList()}");
 
-                  // Buat map dari progres file yang sudah ada untuk mempertahankan progres
-                  Map<String, int> existingProgressMap = {}; // Key: "fileName|fileSize"
+                  Map<String, int> existingProgressMap = {}; 
                   for (var existingFileTuple in _sharedFiles) {
                       existingProgressMap["${existingFileTuple.$1.fileName}|${existingFileTuple.$1.fileSize}"] = existingFileTuple.$2;
                   }
 
                   List<(SharedFile, int)> newMasterList = [];
-                  bool structureChanged = false; // Untuk melacak apakah struktur list (item atau urutan) berubah
+                  bool structureChanged = false; 
 
                   if (filesRsp.files.isEmpty && _sharedFiles.isEmpty) {
                       print("FileSharingReceiver: GetSharedFilesRsp - Both new and old lists are empty.");
-                      // Tidak ada perubahan, _sharedFiles sudah kosong
                   } else {
                       for (var fileMetaFromRsp in filesRsp.files) {
                           String key = "${fileMetaFromRsp.fileName}|${fileMetaFromRsp.fileSize}";
-                          int progress = existingProgressMap[key] ?? 0; // Ambil progres yang ada atau 0 jika file baru
+                          int progress = existingProgressMap[key] ?? 0; 
                           newMasterList.add((fileMetaFromRsp, progress));
                       }
 
-                      // Periksa apakah daftar baru berbeda secara struktural (jumlah item atau item itu sendiri)
-                      // dari daftar lama, bukan hanya nilai progres.
                       if (newMasterList.length != _sharedFiles.length) {
                           structureChanged = true;
                       } else {
                           for (int i = 0; i < newMasterList.length; i++) {
-                              // Bandingkan metadata file, bukan progres di sini untuk perubahan struktural
                               if (newMasterList[i].$1.fileName != _sharedFiles[i].$1.fileName ||
                                   newMasterList[i].$1.fileSize != _sharedFiles[i].$1.fileSize) {
                                   structureChanged = true;
                                   break;
                               }
-                              // Jika file sama tapi progresnya berbeda dari yang disimpan (misal, dari 0 menjadi x), itu bukan perubahan struktural
-                              // tapi update progres yang harusnya sudah ditangani oleh SharedFileContentNotify.
-                              // Di sini kita hanya fokus pada apakah daftar file dari server berubah.
                           }
                       }
-                       _sharedFiles = newMasterList; // Update _sharedFiles dengan daftar yang baru dibangun
+                       _sharedFiles = newMasterList; 
                   }
                   
                   if (structureChanged) {
@@ -207,8 +197,6 @@ class FileSharingReceiver {
                   } else {
                       print("FileSharingReceiver: GetSharedFilesRsp - _sharedFiles list structure and progress preserved or initialized empty.");
                   }
-                  // Selalu panggil onFileProgress untuk merefleksikan daftar (yang mungkin diurutkan ulang atau metadata diperbarui).
-                  // UI harus cukup tangguh untuk menangani ini.
                   onFileProgress?.call(List.from(_sharedFiles));
 
                 } catch (e, s) {
@@ -292,55 +280,11 @@ class FileSharingReceiver {
     });
   }
 
-  Future<String?> _requestPermissions() async {
-    // Dengan FileSaver (SAF), izin storage eksplisit mungkin kurang diperlukan
-    // karena pengguna memilih lokasi. Namun, bisa diminta sebagai fallback atau praktik umum.
-    if (Platform.isAndroid) {
-        var storageStatus = await Permission.storage.request();
-        print("FileSharingReceiver: Permission status storage: $storageStatus");
-        if (!storageStatus.isGranted && !storageStatus.isPermanentlyDenied) {
-             // Jika tidak di-grant tapi tidak permanen ditolak, mungkin pengguna akan diminta lagi oleh SAF.
-             // Jika permanen ditolak, SAF mungkin juga tidak berfungsi.
-             print("FileSharingReceiver: Storage permission not fully granted. SAF will handle user choice.");
-        }
-        if(storageStatus.isPermanentlyDenied){
-            print("FileSharingReceiver: Storage permission permanently denied. Saving may fail.");
-            return "Storage permission permanently denied. Cannot save file.";
-        }
-    }
-    // Untuk iOS, FileSaver juga akan membuka dialog sistem.
-    return null;
-  }
+  // _getMimeType was used by FileSaver, can be removed if not used elsewhere.
+  // String _getMimeType(String fileName) { ... }
 
-  String _getMimeType(String fileName) {
-    final extension = p.extension(fileName).toLowerCase();
-    // Daftar MIME type dasar, bisa diperluas
-    switch (extension) {
-      case '.pdf': return 'application/pdf';
-      case '.jpg': case '.jpeg': return 'image/jpeg';
-      case '.png': return 'image/png';
-      case '.gif': return 'image/gif';
-      case '.mp4': return 'video/mp4';
-      case '.mov': return 'video/quicktime';
-      case '.txt': return 'text/plain';
-      case '.doc': return 'application/msword';
-      case '.docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case '.xls': return 'application/vnd.ms-excel';
-      case '.xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      case '.ppt': return 'application/vnd.ms-powerpoint';
-      case '.pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-      default: return 'application/octet-stream'; // Tipe default jika tidak diketahui
-    }
-  }
 
   Future<String?> finalizeSave(String tempFilePathWithPart, String originalFileName) async {
-    // Izin diminta di sini, tapi FileSaver (SAF) akan memiliki dialognya sendiri.
-    // final String? permissionError = await _requestPermissions();
-    // if (permissionError != null) {
-    //   onError?.call(permissionError);
-    //   return null;
-    // }
-
     final File tempFile = File(tempFilePathWithPart);
     if (!await tempFile.exists()) {
       onError?.call("Temporary file '$tempFilePathWithPart' not found for '$originalFileName'.");
@@ -348,38 +292,71 @@ class FileSharingReceiver {
     }
 
     try {
+      Directory? downloadsDir;
+      if (Platform.isIOS) {
+        // getDownloadsDirectory() returns null on iOS. 
+        // You'll need a different strategy for iOS, e.g., save to app documents or use a picker.
+        print("FileSharingReceiver: getDownloadsDirectory() is not supported on iOS. File cannot be saved to Downloads automatically.");
+        onError?.call("Saving to Downloads directory is not supported on iOS. File: '$originalFileName'.");
+        return null; 
+      } else {
+        downloadsDir = await getDownloadsDirectory();
+      }
+      
+      if (downloadsDir == null) {
+        // This might happen on other platforms if the directory can't be determined.
+        print("FileSharingReceiver: Could not determine downloads directory for '$originalFileName'.");
+        onError?.call("Could not determine downloads directory. Save failed for '$originalFileName'.");
+        return null;
+      }
+
+      // Ensure the downloads directory exists (it usually does, but good for robustness)
+      if (!await downloadsDir.exists()) {
+          await downloadsDir.create(recursive: true);
+      }
+      
+      String finalFilePath = p.join(downloadsDir.path, originalFileName);
+      int count = 1;
+      String tempName = originalFileName;
+      String extension = p.extension(originalFileName);
+      String baseName = p.basenameWithoutExtension(originalFileName);
+
+      // Basic name collision handling: appends (1), (2), etc.
+      while (await File(finalFilePath).exists()) {
+          tempName = '$baseName ($count)$extension';
+          finalFilePath = p.join(downloadsDir.path, tempName);
+          count++;
+      }
+      // If tempName changed, originalFileName for logging/return should reflect the new name.
+      // However, we'll use finalFilePath for actual saving and return.
+      if (tempName != originalFileName) {
+          print("FileSharingReceiver: File name collision. Saving as '$tempName' instead of '$originalFileName'.");
+      }
+
+
       print("FileSharingReceiver: Reading temporary file '$tempFilePathWithPart' into bytes.");
       final Uint8List fileBytes = await tempFile.readAsBytes();
       print("FileSharingReceiver: Temporary file read successfully. Byte length: ${fileBytes.length}");
 
-      final String mimeType = _getMimeType(originalFileName);
-      print("FileSharingReceiver: Attempting to save '$originalFileName' (MIME: $mimeType) using FileSaver (SAF).");
+      print("FileSharingReceiver: Attempting to save '$tempName' to: '$finalFilePath'");
+      
+      final File finalFile = File(finalFilePath);
+      await finalFile.writeAsBytes(fileBytes);
 
-      // Menggunakan FileSaver.saveFile yang akan membuka dialog sistem
-      // Pengguna akan memilih lokasi dan bisa mengganti nama file.
-      // `saveFile` mengembalikan path jika berhasil, null jika dibatalkan atau gagal.
-      String? savedPath = await FileSaver.instance.saveFile(
-          name: originalFileName, // Nama file awal yang disarankan
-          bytes: fileBytes,
-          // ext: p.extension(originalFileName).replaceFirst('.', ''), // Ekstensi tanpa titik
-          mimeType: MimeType.custom, // Menggunakan custom untuk memberikan string MIME type lengkap
-          customMimeType: mimeType,
-      );
+      print("FileSharingReceiver: File '$tempName' saved successfully to: '$finalFilePath'");
+      await tempFile.delete();
+      print("FileSharingReceiver: Temporary file '$tempFilePathWithPart' deleted.");
+      return finalFilePath; // Return the actual path where the file was saved
 
-
-      if (savedPath != null && savedPath.isNotEmpty) {
-        print("FileSharingReceiver: File '$originalFileName' saved successfully via FileSaver to: '$savedPath'");
-        await tempFile.delete();
-        print("FileSharingReceiver: Temporary file '$tempFilePathWithPart' deleted.");
-        return savedPath;
-      } else {
-        print("FileSharingReceiver: File save cancelled by user or failed via FileSaver for '$originalFileName'.");
-        onError?.call("File save cancelled or failed for '$originalFileName'."); // Pesan lebih umum
-        return null;
-      }
     } catch (e, s) {
-      print("FileSharingReceiver: Error during finalizeSave with FileSaver for '$originalFileName': $e\n$s");
-      onError?.call("Failed to save '$originalFileName': $e");
+      print("FileSharingReceiver: Error during finalizeSave to downloads directory for '$originalFileName': $e\n$s");
+      String errorMessage = "Failed to save '$originalFileName' to Downloads: $e";
+      if (Platform.isAndroid && e is FileSystemException) {
+        if (e.osError?.errorCode == 13 || e.osError?.errorCode == 1) { // EACCES (Permission denied) or EPERM (Operation not permitted)
+            errorMessage = "Failed to save '$originalFileName'. Permission denied. On modern Android, direct writes to public Downloads are restricted. The file might be in an app-specific 'Downloads' folder if available, or this operation failed.";
+        }
+      }
+      onError?.call(errorMessage);
       return null;
     }
   }
