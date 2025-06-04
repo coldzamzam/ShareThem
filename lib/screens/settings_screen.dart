@@ -3,10 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_shareit/models/user.dart';
 import 'dart:async';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class SettingsScreen extends StatefulWidget {
@@ -20,7 +16,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  // final FirebaseStorage _storage = FirebaseStorage.instance;
+
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   User? _currentUser;
   UserProfile? _userProfile;
@@ -33,13 +30,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
 
-  // State variables for the custom top notification
   String? _notificationMessage;
   Color? _notificationColor;
   bool _showNotification = false;
   Timer? _notificationTimer;
 
-  bool _isSavingImageLocally = false; // Changed from _isUploadingImage
+  bool _isUpdatingAvatar = false;
+
+  final List<String> _availableAvatars = [
+    'assets/avatars/avatar_1.png',
+    'assets/avatars/avatar_2.png',
+    'assets/avatars/avatar_3.png',
+    'assets/avatars/avatar_4.png',
+    'assets/avatars/avatar_5.png',
+    'assets/avatars/avatar_6.png',
+  ];
 
   @override
   void initState() {
@@ -47,13 +52,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _auth.authStateChanges().listen((user) {
       if (mounted) {
         setState(() {
-          _currentUser = user; // Update the current user
-          _isLoadingProfile = true; // Reset loading state when user changes
+          _currentUser = user;
+          _isLoadingProfile = true;
         });
         if (user != null) {
-          _loadUserProfile(user.uid); // Load profile if user is logged in
+          _loadUserProfile(user.uid);
         } else {
-          // Clear profile data if user logs out
           setState(() {
             _userProfile = null;
             _usernameController.clear();
@@ -61,18 +65,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _addressController.clear();
             _currentPasswordController.clear();
             _newPasswordController.clear();
-            _isLoadingProfile = false; // No user, no profile to load
+            _isLoadingProfile = false;
           });
         }
       }
     });
 
-    // Load initial user state (if already logged in when screen opens)
     _currentUser = _auth.currentUser;
     if (_currentUser != null) {
       _loadUserProfile(_currentUser!.uid);
     } else {
-      _isLoadingProfile = false; // No current user to load
+      _isLoadingProfile = false;
     }
   }
 
@@ -121,8 +124,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             uid: uid,
             email: _currentUser?.email ?? 'N/A',
             username: _currentUser?.displayName ?? 'New User',
-            photoUrl:
-            _currentUser?.photoURL, // This might still be from previous cloud storage
+            photoUrl: _currentUser?.photoURL,
           );
           await _firestore
               .collection('users')
@@ -163,7 +165,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'address': _addressController.text.trim().isEmpty
             ? null
             : _addressController.text.trim(),
-        // photoUrl will be updated separately by _pickImage
       };
 
       await _firestore
@@ -272,6 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       try {
         await _auth.signOut();
         if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
           Navigator.pushReplacementNamed(context, '/login');
           _showCustomTopNotification('Logged out successfully!', Colors.green);
         }
@@ -282,89 +284,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     } else {
-      if (mounted) Navigator.pushReplacementNamed(context, '/login');
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        Navigator.pushReplacementNamed(context, '/login');
+      }
     }
   }
 
-  // --- MODIFIED _pickImage function for Local Storage ---
-  Future<void> _pickImage() async {
-    if (_currentUser == null) {
-      _showCustomTopNotification(
-          'Please log in to change profile picture.', Colors.red);
-      return;
+  Future<void> _updateAvatar(String newAvatarPath) async {
+    if (_currentUser == null) return;
+
+    // Use _scaffoldKey.currentState?.closeEndDrawer() to close the right-side drawer
+    if (_scaffoldKey.currentState?.isEndDrawerOpen == true) {
+      _scaffoldKey.currentState?.closeEndDrawer();
     }
 
-    // This local storage approach is not compatible with web.
-    if (kIsWeb) {
-      _showCustomTopNotification(
-          'Image picking for local storage is not supported on Web.', Colors.red);
-      print('Attempted to pick image for local storage on web. Not supported.');
-      return;
-    }
-
-    final ImagePicker picker = ImagePicker();
-    try {
-      final XFile? image =
-      await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-
-      if (image != null) {
-        setState(() {
-          _isSavingImageLocally = true; // Use the new state variable
-        });
-
-        // Get the application's documents directory
-        final appDir = await getApplicationDocumentsDirectory();
-        final String appDirPath = appDir.path;
-
-        // Create a unique file name (e.g., using user UID and timestamp)
-        final String fileName =
-            '${_currentUser!.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final String localPath =
-        p.join(appDirPath, 'profile_pictures', fileName); // Save in a sub-folder
-
-        // Ensure the directory exists
-        final Directory profilePicsDir =
-        Directory(p.join(appDirPath, 'profile_pictures'));
-        if (!await profilePicsDir.exists()) {
-          await profilePicsDir.create(recursive: true);
-        }
-
-        // Create a File object from the picked XFile path and copy it
-        final File pickedImageFile = File(image.path);
-        final File newImageFile = await pickedImageFile.copy(localPath);
-
-        print('Image saved locally at: ${newImageFile.path}');
-
-        // --- Update UserProfile and Firestore with the LOCAL PATH ---
-        // photoUrl will now be a local file path
+    if (newAvatarPath != _userProfile?.photoUrl) {
+      setState(() {
+        _isUpdatingAvatar = true;
+      });
+      try {
         await _firestore.collection('users').doc(_currentUser!.uid).update({
-          'photoUrl': newImageFile.path, // Store the local path in Firestore
+          'photoUrl': newAvatarPath,
         });
-
-        // await _currentUser!.updatePhotoURL(newImageFile.path); // Firebase Auth expects a URL, so this might not work well
 
         if (mounted) {
           setState(() {
-            _userProfile!.photoUrl =
-                newImageFile.path; // Update local state with the local path
-            _isSavingImageLocally = false;
+            _userProfile!.photoUrl = newAvatarPath;
           });
-          _showCustomTopNotification(
-              'Profile picture saved locally!', Colors.green);
+          _showCustomTopNotification('Profile picture updated!', Colors.green);
         }
-      } else {
-        print('Image picking cancelled.');
+      } catch (e) {
+        print('Error updating avatar: $e');
+        _showCustomTopNotification('An error occurred during avatar update.', Colors.red);
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isUpdatingAvatar = false;
+          });
+        }
       }
-    } catch (e) {
-      print('Error picking or saving image locally: $e');
-      if (mounted) {
-        setState(() {
-          _isSavingImageLocally = false;
-        });
-        _showCustomTopNotification(
-            'An unexpected error occurred during image saving.', Colors.red,
-            duration: const Duration(seconds: 5));
-      }
+    } else {
+      print('Same avatar selected.');
     }
   }
 
@@ -374,116 +335,332 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final bool isWideScreen = MediaQuery.of(context).size.width > 600;
+
     return Scaffold(
-      backgroundColor: Colors.white, // Set background to white
+      key: _scaffoldKey,
+      backgroundColor: Colors.white,
+      // --- Changed from 'drawer' to 'endDrawer' ---
+      endDrawer: Drawer( // This makes the drawer appear from the right
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: <Widget>[
+            DrawerHeader(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Text(
+                    'Choose Your Avatar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _currentUser?.email ?? 'Guest',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: _availableAvatars.length,
+                itemBuilder: (context, index) {
+                  final avatarPath = _availableAvatars[index];
+                  final isSelected = _userProfile?.photoUrl == avatarPath;
+                  return GestureDetector(
+                    onTap: () => _updateAvatar(avatarPath),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                          width: isSelected ? 3 : 1,
+                        ),
+                        color: Colors.grey[100],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          avatarPath,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.broken_image, size: 40, color: Colors.red);
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
       body: Stack(
         children: [
-          // Untuk menengahkan konten secara vertikal, kita akan membungkus Column utama
-          // dengan Center atau Align, dan memastikan Expanded di dalamnya bekerja dengan benar.
-          Center( // Menengahkan seluruh konten secara vertikal
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // Menggunakan ukuran minimal agar Column tidak mengambil seluruh ruang yang tidak perlu
-              children: [
-                // SizedBox(height: MediaQuery.of(context).padding.top), // Tidak diperlukan di sini jika di Center
+          Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 15, 16, 15),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Settings",
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    ),
+                    if (widget.onClose != null)
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 30),
+                        onPressed: widget.onClose,
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
 
-                // Expanded juga tidak diperlukan lagi karena SingleChildScrollView akan mengelola scroll
-                // dan Center akan menengahkan di sisa ruang yang tersedia
-                SingleChildScrollView( // Memastikan konten bisa discroll jika melebihi layar
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(horizontal: isWideScreen ? 100.0 : 16.0),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center, // Tetap center untuk horizontal
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // SizedBox(height: 40) bisa disesuaikan atau dihapus tergantung desain
-                      // Jika Center sudah digunakan, ini akan memberikan ruang dari atas konten.
-                      const SizedBox(height: 40), // Menambah jarak dari atas konten
-
                       _buildProfilePictureSection(),
                       const SizedBox(height: 10),
                       _currentUser != null
                           ? Text(
-                        _userProfile?.username ??
-                            _currentUser!.email ??
-                            'No Username/Email',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87, // Adjusted color
-                        ),
-                      )
+                              _userProfile?.username ??
+                                  _currentUser!.email ??
+                                  'No Username/Email',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            )
                           : const SizedBox.shrink(),
                       _currentUser != null
                           ? Text(
-                        _currentUser!.email ?? 'No Email',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey[600], // Adjusted color
-                        ),
-                      )
-                          : const SizedBox.shrink(),
+                              _currentUser!.email ?? 'No Email',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[600],
+                              ),
+                            )
+                          : const SizedBox(height: 10),
                       const SizedBox(height: 30),
 
-                      // Tombol Login/Logout dan Close
+                      if (_currentUser != null)
+                        Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Profile Information',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.secondary,
+                                ),
+                              ),
+                              const Divider(height: 20, thickness: 1.5, color: Colors.grey),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _usernameController,
+                                decoration: InputDecoration(
+                                  labelText: 'Username',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  prefixIcon: const Icon(Icons.person),
+                                  filled: true,
+                                  fillColor: Colors.grey[50],
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Username cannot be empty';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _phoneNumberController,
+                                keyboardType: TextInputType.phone,
+                                decoration: InputDecoration(
+                                  labelText: 'Phone Number',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  prefixIcon: const Icon(Icons.phone),
+                                  filled: true,
+                                  fillColor: Colors.grey[50],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _addressController,
+                                keyboardType: TextInputType.streetAddress,
+                                maxLines: 3,
+                                decoration: InputDecoration(
+                                  labelText: 'Address',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  prefixIcon: const Icon(Icons.location_on),
+                                  filled: true,
+                                  fillColor: Colors.grey[50],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _updateProfile,
+                                  icon: const Icon(Icons.save),
+                                  label: const Text('Update Profile'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF8E44AD),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    textStyle: const TextStyle(fontSize: 16),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 30),
+
+                              if (_currentUser != null && _currentUser!.providerData.any((info) => info.providerId == 'password'))
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Change Password',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).colorScheme.secondary,
+                                      ),
+                                    ),
+                                    const Divider(height: 20, thickness: 1.5, color: Colors.grey),
+                                    const SizedBox(height: 16),
+                                    TextFormField(
+                                      controller: _currentPasswordController,
+                                      obscureText: true,
+                                      decoration: InputDecoration(
+                                        labelText: 'Current Password',
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        prefixIcon: const Icon(Icons.lock_open),
+                                        filled: true,
+                                        fillColor: Colors.grey[50],
+                                      ),
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Please enter your current password';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 16),
+                                    TextFormField(
+                                      controller: _newPasswordController,
+                                      obscureText: true,
+                                      decoration: InputDecoration(
+                                        labelText: 'New Password',
+                                        hintText: 'Minimum 6 characters',
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        prefixIcon: const Icon(Icons.lock),
+                                        filled: true,
+                                        fillColor: Colors.grey[50],
+                                      ),
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Please enter a new password';
+                                        }
+                                        if (value.length < 6) {
+                                          return 'Password must be at least 6 characters';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 24),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _changePassword,
+                                        icon: const Icon(Icons.vpn_key),
+                                        label: const Text('Change Password'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFFD2B4DE),
+                                          foregroundColor: Colors.black87,
+                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          textStyle: const TextStyle(fontSize: 16),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              const SizedBox(height: 30),
+                            ],
+                          ),
+                        ),
                       ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 250), // Lebar maksimum tombol
+                        constraints: BoxConstraints(maxWidth: isWideScreen ? double.infinity : 250),
                         child: Column(
                           children: [
-                            if (_currentUser == null)
-                              Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(30),
+                            Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
                                 ),
-                                child: ElevatedButton(
-                                  onPressed: _handleAuthButtonPress,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    padding: const EdgeInsets.symmetric(vertical: 18),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(30),
-                                    ),
-                                    textStyle: const TextStyle(fontSize: 18),
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: ElevatedButton(
+                                onPressed: _handleAuthButtonPress,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
                                   ),
-                                  child: const Text(
-                                    "Login",
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                  ),
+                                  textStyle: const TextStyle(fontSize: 18),
+                                ),
+                                child: Text(
+                                  _currentUser != null ? "Logout" : "Login",
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                               ),
-                            if (_currentUser != null)
-                              Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                child: ElevatedButton(
-                                  onPressed: _handleAuthButtonPress,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    padding: const EdgeInsets.symmetric(vertical: 18),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(30),
-                                    ),
-                                    textStyle: const TextStyle(fontSize: 18),
-                                  ),
-                                  child: const Text(
-                                    "Logout",
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
+                            ),
                             const SizedBox(height: 15),
                             if (widget.onClose != null)
                               SizedBox(
@@ -505,7 +682,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                       ),
-                      // SizedBox untuk padding bawah, sesuaikan jika perlu
                       SizedBox(
                           height: MediaQuery.of(context).padding.bottom > 0
                               ? MediaQuery.of(context).padding.bottom
@@ -513,8 +689,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           if (_showNotification && _notificationMessage != null && _notificationColor != null)
             Positioned(
@@ -540,36 +716,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- MODIFIED _buildProfilePictureSection function ---
   Widget _buildProfilePictureSection() {
-    String? currentPhotoPath =
-        _userProfile?.photoUrl; // This will now hold a local path or a cloud URL
+    String? currentPhotoPath = _userProfile?.photoUrl;
 
     String? initial = _currentUser?.email?.isNotEmpty == true
         ? _currentUser!.email![0].toUpperCase()
+        : (_userProfile?.username?.isNotEmpty == true
+        ? _userProfile!.username[0].toUpperCase()
+        : null);
 
-        : (_userProfile?.username.isNotEmpty == true
-            ? _userProfile!.username[0].toUpperCase()
-            : null);
-
-
-    // Check if the currentPhotoPath is a local file path AND if it exists
-    File? localImageFile;
-    bool isLocalImage = false;
-    if (currentPhotoPath != null && !currentPhotoPath.startsWith('http')) {
-      localImageFile = File(currentPhotoPath);
-      // Check if the file actually exists on disk
-      if (localImageFile.existsSync()) {
-        isLocalImage = true;
-      } else {
-        print('Local image file not found at: $currentPhotoPath');
-        localImageFile = null; // Clear if not found
-        currentPhotoPath = null; // Also clear the path so it falls back to default
-      }
+    Widget imageWidget;
+    if (_isUpdatingAvatar) {
+      imageWidget = const SizedBox(
+        width: 50,
+        height: 50,
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    } else if (currentPhotoPath != null && currentPhotoPath.startsWith('assets/')) {
+      imageWidget = ClipOval(
+        child: Image.asset(
+          currentPhotoPath,
+          width: 150,
+          height: 150,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('Error loading asset image $currentPhotoPath: $error');
+            return _buildDefaultAvatar(initial);
+          },
+        ),
+      );
+    } else if (currentPhotoPath != null && currentPhotoPath.startsWith('http')) {
+      imageWidget = ClipOval(
+        child: Image.network(
+          currentPhotoPath,
+          width: 150,
+          height: 150,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            print('Error loading network image $currentPhotoPath: $error');
+            return _buildDefaultAvatar(initial);
+          },
+        ),
+      );
+    } else {
+      imageWidget = _buildDefaultAvatar(initial);
     }
 
     return GestureDetector(
-      onTap: _isSavingImageLocally ? null : _pickImage, // Disable tap during saving
+      // --- Changed to openEndDrawer() ---
+      onTap: _isUpdatingAvatar ? null : () => _scaffoldKey.currentState?.openEndDrawer(), // Open from right
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -579,7 +774,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: const LinearGradient(
-                colors: [Color(0xFFAA88CC), Color(0xFF554DDE)], // Figma gradient for profile circle
+                colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -592,39 +787,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            child: _isSavingImageLocally
-                ? const CircularProgressIndicator(color: Colors.white) // Show loader
-                : (isLocalImage
-                ? ClipOval(
-              child: Image.file(
-                localImageFile!, // Use Image.file for local files
-                width: 150,
-                height: 150,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildDefaultAvatar(initial),
-              ),
-            )
-                : (currentPhotoPath != null && currentPhotoPath.isNotEmpty
-                ? ClipOval(
-              child: Image.network( // Still use Image.network for actual URLs
-                currentPhotoPath,
-                width: 150,
-                height: 150,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildDefaultAvatar(initial),
-              ),
-            )
-                : _buildDefaultAvatar(initial))),
+            child: imageWidget,
           ),
-          if (!_isSavingImageLocally)
+          if (!_isUpdatingAvatar)
             Positioned(
               bottom: 0,
               right: 0,
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFAA88CC), // Camera icon background color
+                  color: const Color(0xFFAA88CC),
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                 ),
