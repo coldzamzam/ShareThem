@@ -22,13 +22,13 @@
             "flutterMode": "release"
         },
         {
-            "name": "Small Phone",
+            "name": "Medium Phone",
             "request": "launch",
             "type": "dart",
             "deviceId": "emulator-5556"
         },
         {
-            "name": "Medium Phone",
+            "name": "Small Phone",
             "request": "launch",
             "type": "dart",
             "deviceId": "emulator-5554"
