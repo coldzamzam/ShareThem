@@ -623,7 +623,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     String? initial = _currentUser?.email?.isNotEmpty == true
         ? _currentUser!.email![0].toUpperCase()
-        : (_userProfile?.username?.isNotEmpty == true
+        : (_userProfile?.username.isNotEmpty == true
             ? _userProfile!.username[0].toUpperCase()
             : null);
 
