@@ -38,12 +38,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isUpdatingAvatar = false;
 
   final List<String> _availableAvatars = [
-    'assets/avatars/avatar_1.png',
-    'assets/avatars/avatar_2.png',
-    'assets/avatars/avatar_3.png',
-    'assets/avatars/avatar_4.png',
-    'assets/avatars/avatar_5.png',
-    'assets/avatars/avatar_6.png',
+    'assets/avatars/Avatar_1.png',
+    'assets/avatars/Avatar_2.png',
+    'assets/avatars/Avatar_3.png',
+    'assets/avatars/Avatar_4.png',
+    'assets/avatars/Avatar_5.png',
+    'assets/avatars/Avatar_6.png',
   ];
 
   @override
