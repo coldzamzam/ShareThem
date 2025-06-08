@@ -1,7 +1,10 @@
 import 'package:bonsoir/bonsoir.dart';
 import 'dart:async';
-
 import 'package:uuid/uuid.dart';
+
+// Import yang ditambahkan untuk Firebase
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SharingDiscoveryService {
   static final String _sessionId = Uuid().v7();
@@ -23,20 +26,39 @@ class SharingDiscoveryService {
   static Stream<BonsoirService> get resolvedServiceStream =>
       _resolvedServiceController.stream;
 
-  static Future<void> beginBroadcast({
-    String deviceName = "Unknown Device",
-  }) async {
+  // --- METODE YANG DIMODIFIKASI ---
+  static Future<void> beginBroadcast() async {
     if (isDiscoverable) {
       await stopBroadcast();
     }
 
+    String deviceName = "Unknown Device"; // Nama default
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+
+    // Periksa apakah ada pengguna yang sedang login
+    if (currentUser != null) {
+      try {
+        final docSnapshot =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUser.uid)
+                .get();
+
+        // Periksa apakah dokumen ada dan berisi data
+        if (docSnapshot.exists && docSnapshot.data() != null) {
+          deviceName = docSnapshot.data()!['username'] ?? "Nameless User";
+        }
+      } catch (e) {
+        print("Error fetching username from Firestore: $e");
+        // Jika terjadi error, tetap gunakan nama default
+      }
+    }
+
     _currentBroadcastService = BonsoirService(
-      name: deviceName,
+      name: deviceName, // Gunakan username yang telah diambil
       type: serviceType,
       port: servicePort,
-      attributes: {
-        "sessionId": _sessionId
-      }
+      attributes: {"sessionId": _sessionId},
     );
 
     _broadcaster = BonsoirBroadcast(service: _currentBroadcastService!);
@@ -45,7 +67,7 @@ class SharingDiscoveryService {
     await _broadcaster!.start();
     isDiscoverable = true;
 
-    print('Broadcasting started');
+    print('Broadcasting started with device name: $deviceName');
   }
 
   static Future<void> stopBroadcast() async {
@@ -72,7 +94,6 @@ class SharingDiscoveryService {
     }
 
     await _discovery.ready;
-
     await _discovery.start();
     isSearching = true;
     print("Discovery started.");
