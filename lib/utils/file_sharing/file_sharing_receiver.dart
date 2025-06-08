@@ -1,12 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/material.dart'; // ValueChanged
-import 'package:path_provider/path_provider.dart'; // Added for getDownloadsDirectory
-import 'package:path/path.dart' as p; // Import package path
-// import 'package:file_saver/file_saver.dart'; // REMOVED file_saver
-
-// Diasumsikan proto dan packet util ada di path yang benar relatif terhadap file ini
-// Sesuaikan import jika struktur proyek Anda berbeda
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter_shareit/protos/packet.pbenum.dart';
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
 import 'package:flutter_shareit/utils/file_sharing/packet.dart';
@@ -279,10 +275,6 @@ class FileSharingReceiver {
       }
     });
   }
-
-  // _getMimeType was used by FileSaver, can be removed if not used elsewhere.
-  // String _getMimeType(String fileName) { ... }
-
 
   Future<String?> finalizeSave(String tempFilePathWithPart, String originalFileName) async {
     final File tempFile = File(tempFilePathWithPart);

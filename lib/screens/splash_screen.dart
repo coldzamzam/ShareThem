@@ -15,7 +15,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // Delay splash screen for 3 seconds, then navigate
     Future.delayed(const Duration(seconds: 6), () {
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.pushReplacementNamed(context, '/login');
     });
   }
   
