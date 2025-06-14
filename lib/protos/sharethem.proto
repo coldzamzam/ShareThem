@@ -13,4 +13,7 @@ message SharedFile {
     string file_name = 1;
     uint32 file_size = 2;
     uint32 file_crc = 3;
+    // ADD THESE TWO NEW FIELDS
+    string sender_id = 4;   // Unique identifier of the sender (e.g., Firebase UID)
+    string sender_name = 5; // Display name of the sender
 }

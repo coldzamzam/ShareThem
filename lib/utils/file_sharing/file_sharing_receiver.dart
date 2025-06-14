@@ -1,274 +1,181 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
-import 'package:flutter_shareit/protos/sharethem.pb.dart';
-import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
-import 'package:open_file/open_file.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter_shareit/utils/file_utils.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_shareit/protos/sharethem.pb.dart';
 import 'package:flutter_shareit/protos/packet.pbenum.dart';
+import 'package:flutter_shareit/protos/packet.pb.dart';
 import 'package:flutter_shareit/utils/file_sharing/packet.dart';
+import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
+import 'package:flutter_shareit/utils/auth_utils.dart';
+import 'package:flutter_shareit/models/received_file_entry.dart';
+import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_shareit/firebase_options.dart';
+import 'package:flutter/services.dart'; // Import for BackgroundIsolateBinaryMessenger
+import 'dart:ui' as ui; // Import for ui.RootIsolateToken
 
+// --- TOP-LEVEL HELPER FUNCTIONS FOR ISOLATE ---
 
-// --- Definition for ReceiveScreen ---
-
-class ReceiveScreen extends StatefulWidget {
-  const ReceiveScreen({super.key});
-
-  @override
-  State<ReceiveScreen> createState() => _ReceiveScreenState();
+Future<Directory> _getDownloadDirectoryForUser(String receiverUserId) async {
+  final baseDir = (await getExternalStorageDirectory())!;
+  final downloadDir = Directory(
+    p.join(baseDir.path, 'downloads', receiverUserId),
+  );
+  if (!await downloadDir.exists()) {
+    await downloadDir.create(recursive: true);
+  }
+  return downloadDir;
 }
 
-class _ReceiveScreenState extends State<ReceiveScreen> {
-  bool _discoverable = SharingDiscoveryService.isDiscoverable;
-  List<(SharedFile, int)> _sharedFiles = [];
-  bool _receivingBegun = false;
-  late FileSharingReceiver _receiver;
+Future<String?> _performFinalizeSaveInIsolate(
+  Map<String, dynamic> params,
+) async {
+  // Retrieve the token from params
+  final ui.RootIsolateToken? rootIsolateToken = params['rootIsolateToken'] as ui.RootIsolateToken?;
 
-  final Map<String, String> _tempFilePaths = {};
-  // State untuk file yang berhasil disimpan
-  final List<Map<String, String>> _successfullySavedFilesData = [];
-  String _errorMessage = "";
-
-  @override
-  void initState() {
-    super.initState();
-    _receiver = FileSharingReceiver(
-      onFileProgress: (files) {
-        if (!mounted) return;
-        setState(() {
-          _receivingBegun = true;
-          _sharedFiles = files;
-          _errorMessage = "";
-        });
-      },
-      onFileReceivedToTemp: (fileData) {
-        if (!mounted) return;
-        SharedFile file = fileData[0] as SharedFile;
-        String tempPath = fileData[1] as String;
-        setState(() {
-          _tempFilePaths[file.fileName] = tempPath;
-          final index = _sharedFiles.indexWhere((f) => f.$1.fileName == file.fileName);
-          if (index != -1) {
-            if (_sharedFiles[index].$2 < file.fileSize) {
-              _sharedFiles[index] = (file, file.fileSize.toInt());
-            }
-          } else {
-            _sharedFiles.add((file, file.fileSize.toInt()));
-          }
-        });
-      },
-      onError: (message) {
-        if (!mounted) return;
-        print("ReceiveScreen Error: $message");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $message'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-        setState(() {
-          _errorMessage = message;
-        });
-      },
-    );
+  if (rootIsolateToken == null) {
+    print("Isolate: Error: RootIsolateToken is null. Cannot initialize BackgroundIsolateBinaryMessenger.");
+    return "Error: Failed to initialize background services for file save.";
   }
-  
-  // ADDED: Helper function to open a file.
-  Future<void> _openFile(String filePath, String fileName) async {
-    final result = await OpenFile.open(filePath);
-    if (result.type != ResultType.done && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Could not open file $fileName: ${result.message}'),
-        backgroundColor: Colors.orange,
-      ));
+
+  // Pass the token to ensureInitialized
+  BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken);
+
+  // Initialize Firebase for this isolate if it hasn't been already
+  if (Firebase.apps.isEmpty) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      print("Isolate: Firebase initialized successfully in isolate.");
+    } catch (e) {
+      print("Isolate: Error initializing Firebase in isolate: $e");
+      return "Error: Failed to initialize Firebase for saving file metadata: $e";
     }
   }
 
+  final String tempFilePathWithPart = params['tempFilePathWithPart'];
+  final String originalFileName = params['originalFileName'];
+  final int fileSize = params['fileSize'];
+  final String senderId = params['senderId'];
+  final String senderName = params['senderName'];
+  final String receiverUserId = params['receiverUserId'];
 
-  @override
-  void dispose() {
-    SharingDiscoveryService.stopBroadcast();
-    _receiver.stop();
-    super.dispose();
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+  final File tempFile = File(tempFilePathWithPart);
+  if (!await tempFile.exists()) {
+    return "Error: Temporary file '$tempFilePathWithPart' not found.";
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      // The AppBar is managed by HomePage, so it's removed from here.
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedSwitcher(
-                duration: Durations.short2,
-                child: _discoverable
-                    ? const Icon(Icons.wifi_tethering, size: 100, key: ValueKey(1), color: Colors.blue)
-                    : Icon(Icons.wifi_tethering_off, size: 100, color: Colors.grey[400], key: const ValueKey(0)),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _discoverable
-                    ? "Waiting for sender..."
-                    : (_receivingBegun ? "Receiving files..." : "Press 'Start Receiving'"),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              if (_errorMessage.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(_errorMessage, style: const TextStyle(color: Colors.red, fontSize: 12)),
-              ],
-              const SizedBox(height: 20),
-              Text("Incoming Files:", style: Theme.of(context).textTheme.titleSmall),
-              Expanded(
-                flex: 2,
-                child: Card(
-                  elevation: 2,
-                  child: _sharedFiles.isEmpty
-                      ? const Center(child: Text("Ready to receive. Files will appear here."))
-                      : ListView.builder(
-                          itemCount: _sharedFiles.length,
-                          itemBuilder: (_, i) {
-                            final fileTuple = _sharedFiles[i];
-                            final sharedFile = fileTuple.$1;
-                            final receivedBytes = fileTuple.$2;
-                            final progress = (sharedFile.fileSize == 0)
-                                ? 0.0
-                                : (receivedBytes / sharedFile.fileSize);
-                            final bool isSaved = _successfullySavedFilesData.any((savedFile) => savedFile['name'] == sharedFile.fileName);
-                            final bool isReadyToSave = _tempFilePaths.containsKey(sharedFile.fileName);
-
-                            Widget trailingWidget;
-                            if (isSaved) {
-                              trailingWidget = Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text("Saved ", style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                                  Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
-                                ],
-                              );
-                            } else if (isReadyToSave) {
-                              trailingWidget = ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  textStyle: const TextStyle(fontSize: 13),
-                                ),
-                                onPressed: () async {
-                                  String? tempPath = _tempFilePaths[sharedFile.fileName];
-                                  if (tempPath == null) return;
-
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  String? finalPath = await _receiver.finalizeSave(tempPath, sharedFile.fileName);
-
-                                  if (finalPath != null && finalPath.isNotEmpty) {
-                                    messenger.showSnackBar(SnackBar(content: Text("${p.basename(finalPath)} saved!")));
-                                    if (!mounted) return;
-                                    setState(() {
-                                      // Use the original file name as the key, but store the final path.
-                                      if (!_successfullySavedFilesData.any((f) => f['name'] == sharedFile.fileName)) {
-                                        _successfullySavedFilesData.add({'name': sharedFile.fileName, 'path': finalPath});
-                                      }
-                                    });
-                                  } else {
-                                    messenger.showSnackBar(SnackBar(content: Text("Failed to save ${sharedFile.fileName}.")));
-                                  }
-                                },
-                                child: const Text("Save"),
-                              );
-                            } else {
-                              trailingWidget = Text("${(progress * 100).toStringAsFixed(0)}%");
-                            }
-
-                            return ListTile(
-                              leading: const Icon(Icons.description),
-                              title: Text(sharedFile.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text('Size: ${fileSizeToHuman(sharedFile.fileSize.toInt())}'),
-                              trailing: trailingWidget,
-                              onTap: isSaved
-                                  ? () {
-                                      final savedFile = _successfullySavedFilesData.firstWhere((f) => f['name'] == sharedFile.fileName);
-                                      _openFile(savedFile['path']!, p.basename(savedFile['path']!));
-                                    }
-                                  : null, 
-                            );
-                          },
-                        ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  if (_discoverable) {
-                    setState(() {
-                      _discoverable = false;
-                      _receivingBegun = false;
-                    });
-                    await SharingDiscoveryService.stopBroadcast();
-                    await _receiver.stop();
-                  } else {
-                    setState(() {
-                      _sharedFiles.clear();
-                      _tempFilePaths.clear();
-                      _successfullySavedFilesData.clear(); // Clear saved files for new session
-                      _receivingBegun = false;
-                      _errorMessage = "";
-                    });
-                    await _receiver.start();
-                    await SharingDiscoveryService.beginBroadcast();
-                    setState(() {
-                      _discoverable = true;
-                    });
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: _discoverable ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                ),
-                child: Text(
-                  _discoverable ? 'Stop Receiving' : 'Start Receiving',
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+  try {
+    Directory targetDirectory = await _getDownloadDirectoryForUser(
+      receiverUserId,
     );
+    print(
+      "Isolate: Target directory for receiver $receiverUserId is: ${targetDirectory.path}",
+    );
+
+    String finalPath = p.join(targetDirectory.path, originalFileName);
+    String baseName = p.basenameWithoutExtension(originalFileName);
+    String extension = p.extension(originalFileName);
+    int count = 1;
+
+    while (await File(finalPath).exists()) {
+      String newName = '$baseName ($count)$extension';
+      finalPath = p.join(targetDirectory.path, newName);
+      count++;
+    }
+
+    print("Isolate: Reading temporary file '$tempFilePathWithPart'.");
+    final Uint8List fileBytes = await tempFile.readAsBytes();
+
+    print("Isolate: Attempting to save file to: '$finalPath'");
+    final File finalFile = File(finalPath);
+    await finalFile.writeAsBytes(fileBytes);
+
+    print("Isolate: File saved successfully to: '$finalPath'");
+    await tempFile.delete();
+    print("Isolate: Temporary file '$tempFilePathWithPart' deleted.");
+
+    final receivedFileEntry = ReceivedFileEntry(
+      id: '',
+      fileName: p.basename(finalPath),
+      filePath: finalPath,
+      fileSize: fileSize,
+      modifiedDate: DateTime.now(),
+      senderId: senderId,
+      senderName: senderName,
+    );
+
+    await firestore
+      .collection('users') // <--- Collection 'users'
+      .doc(receiverUserId) // <--- Document for the user
+      .collection('savedFiles') // <--- Subcollection 'savedFiles'
+      .add(receivedFileEntry.toFirestore());
+
+    print(
+      "Isolate: Saved file metadata to Firestore for receiver $receiverUserId.",
+    );
+    return finalPath;
+  } catch (e, s) {
+    print("Isolate: Error during finalizeSave: $e\n$s");
+    String errorMessage = "Failed to save '$originalFileName': $e";
+    if (Platform.isAndroid && e is FileSystemException) {
+      if (e.osError?.errorCode == 13 || e.osError?.errorCode == 1) {
+        errorMessage =
+          "Failed to save '$originalFileName' due to permission issues on Android.";
+      }
+    }
+    return "Error: $errorMessage";
   }
 }
-
-// --- Definition for FileSharingReceiver ---
 
 class FileSharingReceiver {
   final int listenPort;
   ValueChanged<List<(SharedFile, int)>>? onFileProgress;
   ValueChanged<String>? onError;
   ValueChanged<List<dynamic>>? onFileReceivedToTemp;
+  VoidCallback? onTransferComplete;
 
-  List<(SharedFile, int)> _sharedFiles = [];
+  Map<
+    String,
+    ({SharedFile sharedFile, int receivedBytes, bool isCompletedAndNotified})
+  >
+  _sharedFilesStatus = {};
   ServerSocket? _serverSocket;
+  Socket? _currentClientSocket;
+  StreamSubscription<Uint8List>? _socketSubscription;
   String? _temporaryStoragePath;
 
   final Map<String, IOSink> _fileSinks = {};
+  Uint8List _incomingBuffer = Uint8List(
+    0,
+  );
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const String _appId = 'flutter_shareit_app';
 
   FileSharingReceiver({
     this.listenPort = SharingDiscoveryService.servicePort,
     this.onFileProgress,
     this.onError,
     this.onFileReceivedToTemp,
+    this.onTransferComplete,
   });
 
   Future<void> _prepareStoragePaths() async {
     try {
       final tempDir = await getTemporaryDirectory();
       _temporaryStoragePath = tempDir.path;
-      print('FileSharingReceiver: Temporary files will be stored in: $_temporaryStoragePath');
+      print(
+        'FileSharingReceiver: Temporary files will be stored in: $_temporaryStoragePath',
+      );
     } catch (e) {
       print("FileSharingReceiver: Error preparing temporary storage path: $e");
       onError?.call("Failed to prepare temporary storage directory: $e");
@@ -278,21 +185,36 @@ class FileSharingReceiver {
 
   Future<void> stop() async {
     print("FileSharingReceiver: stop() called.");
-    if (_serverSocket == null && _fileSinks.isEmpty) {
-      print("FileSharingReceiver: Already stopped or nothing to stop.");
-    }
+
+    await _socketSubscription?.cancel();
+    _socketSubscription = null;
+
     try {
-      await _serverSocket?.close();
-      print("FileSharingReceiver: Server socket closed.");
+      if (_currentClientSocket != null) {
+        await _currentClientSocket?.flush();
+        await _currentClientSocket?.close();
+        _currentClientSocket = null;
+        print("FileSharingReceiver: Current client socket closed.");
+      }
+    } catch (e) {
+      print("FileSharingReceiver: Error closing current client socket: $e");
+    }
+
+    try {
+      if (_serverSocket != null) {
+        await _serverSocket?.close();
+        _serverSocket = null;
+        print("FileSharingReceiver: Server socket closed.");
+      }
     } catch (e) {
       print("FileSharingReceiver: Error closing server socket: $e");
     }
-    _serverSocket = null;
 
     final List<String> sinkKeys = _fileSinks.keys.toList();
     for (final key in sinkKeys) {
       final sink = _fileSinks[key];
       try {
+        await sink?.flush();
         await sink?.close();
         print("FileSharingReceiver: Closed sink for $key.");
       } catch (e) {
@@ -300,7 +222,10 @@ class FileSharingReceiver {
       }
     }
     _fileSinks.clear();
-    print("FileSharingReceiver: All sinks closed and cleared. Receiver stopped.");
+    _incomingBuffer = Uint8List(0);
+    print(
+      "FileSharingReceiver: All sinks closed and cleared. Receiver stopped.",
+    );
   }
 
   Future<void> start() async {
@@ -312,29 +237,41 @@ class FileSharingReceiver {
 
     await _prepareStoragePaths();
     if (_temporaryStoragePath == null) {
-      print("FileSharingReceiver: Temporary storage path not available. Receiver cannot start.");
-      onError?.call("Temporary storage path not available. Cannot start receiver.");
+      onError?.call(
+        "Temporary storage path not available. Cannot start receiver.",
+      );
       return;
     }
-    _sharedFiles.clear();
+    _sharedFilesStatus.clear();
+    _incomingBuffer = Uint8List(0);
+
     if (_fileSinks.isNotEmpty) {
-        print("FileSharingReceiver: Warning - _fileSinks was not empty at start. Clearing now.");
-        final List<String> sinkKeys = _fileSinks.keys.toList();
-        for (final key in sinkKeys) {
-            try {
-                await _fileSinks[key]?.close();
-            } catch (e) {/* ignore */}
+      print(
+        "FileSharingReceiver: Warning - _fileSinks was not empty at start. Clearing now.",
+      );
+      final List<String> sinkKeys = _fileSinks.keys.toList();
+      for (final key in sinkKeys) {
+        try {
+          await _fileSinks[key]?.flush();
+          await _fileSinks[key]?.close();
+        } catch (e) {
+          /* ignore errors during forced cleanup */
         }
-        _fileSinks.clear();
+      }
+      _fileSinks.clear();
     }
 
-    print("FileSharingReceiver: Attempting to bind server socket on port $listenPort.");
+    print(
+      "FileSharingReceiver: Attempting to bind server socket on port $listenPort.",
+    );
     try {
       _serverSocket = await ServerSocket.bind(
         InternetAddress.anyIPv4,
         listenPort,
       );
-      print('FileSharingReceiver: Server socket bound successfully on port $listenPort. Listening for connections...');
+      print(
+        'FileSharingReceiver: Server socket bound successfully on port $listenPort. Listening for connections...',
+      );
     } catch (e) {
       print("FileSharingReceiver: Error binding server socket: $e");
       onError?.call("Failed to start receiver: $e");
@@ -342,98 +279,106 @@ class FileSharingReceiver {
     }
 
     _serverSocket!.listen((socket) {
-      print('FileSharingReceiver: Connection received from ${socket.remoteAddress.address}:${socket.remotePort}');
-      Uint8List? tempBuf;
+      if (_currentClientSocket != null) {
+        print(
+          'FileSharingReceiver: Already connected to a sender. Rejecting new connection from ${socket.remoteAddress.address}:${socket.remotePort}',
+        );
+        socket.destroy();
+        return;
+      }
 
-      socket.listen(
+      _currentClientSocket = socket;
+      print(
+        'FileSharingReceiver: Connection received from ${socket.remoteAddress.address}:${socket.remotePort}',
+      );
+      _incomingBuffer = Uint8List(0);
+
+      _socketSubscription = _currentClientSocket!.listen(
         (data) async {
-          if (tempBuf != null) {
-            data = Uint8List.fromList([...tempBuf!, ...data]);
-            tempBuf = null;
-          } else {
-            data = Uint8List.fromList(data);
-          }
+          _incomingBuffer = Uint8List.fromList([..._incomingBuffer, ...data]);
 
-          final bytes = data.buffer.asByteData();
           var offset = 0;
-
-          while(true) {
-            if (offset + 4 > bytes.lengthInBytes) {
-              tempBuf = Uint8List.sublistView(data, offset);
+          while (true) {
+            if (offset + 4 > _incomingBuffer.lengthInBytes) {
               break;
             }
 
-            final length = bytes.getUint32(offset);
-            final headerAndPacketLength = 4 + 1 + length;
+            final packetLength = ByteData.view(
+              _incomingBuffer.buffer,
+              offset,
+              4,
+            ).getUint32(0);
+            final headerAndPacketLength =
+                4 +
+                1 +
+                packetLength;
 
-            if (offset + headerAndPacketLength > bytes.lengthInBytes) {
-              tempBuf = Uint8List.sublistView(data, offset);
+            if (offset + headerAndPacketLength >
+                _incomingBuffer.lengthInBytes) {
               break;
             }
 
-            final packetTypeByte = bytes.getUint8(offset + 4);
+            final packetTypeByte =
+                _incomingBuffer[offset + 4];
             EPacketType? packetType;
             try {
-                packetType = EPacketType.valueOf(packetTypeByte);
+              packetType = EPacketType.valueOf(packetTypeByte);
             } catch (e) {
-                print("FileSharingReceiver: Unknown EPacketType byte: $packetTypeByte. Skipping.");
-                offset += headerAndPacketLength;
-                if (offset >= bytes.lengthInBytes) {
-                    tempBuf = null; break;
-                }
-                continue;
+              print(
+                "FileSharingReceiver: Unknown EPacketType byte: $packetTypeByte at offset $offset. Skipping this packet.",
+              );
+              offset += headerAndPacketLength;
+              continue;
             }
-            
+
             final payloadOffset = offset + 4 + 1;
+            final Uint8List payloadBytes = Uint8List.sublistView(
+              _incomingBuffer,
+              payloadOffset,
+              payloadOffset + packetLength,
+            );
 
             switch (packetType) {
               case EPacketType.GetSharedFilesRsp:
                 try {
-                  final filesRsp = GetSharedFilesRsp.fromBuffer(
-                    Uint8List.sublistView(data, payloadOffset, payloadOffset + length),
+                  final filesRsp = GetSharedFilesRsp.fromBuffer(payloadBytes);
+                  print(
+                    "FileSharingReceiver: GetSharedFilesRsp - Received with files: ${filesRsp.files.map((f) => f.fileName).toList()}",
                   );
-                  print("FileSharingReceiver: GetSharedFilesRsp - Received with files: ${filesRsp.files.map((f) => f.fileName).toList()}");
 
-                  Map<String, int> existingProgressMap = {}; 
-                  for (var existingFileTuple in _sharedFiles) {
-                      existingProgressMap["${existingFileTuple.$1.fileName}|${existingFileTuple.$1.fileSize}"] = existingFileTuple.$2;
+                  Map<
+                    String,
+                    ({
+                      SharedFile sharedFile,
+                      int receivedBytes,
+                      bool isCompletedAndNotified,
+                    })
+                  >
+                  newStatusMap = {};
+                  for (var fileMetaFromRsp in filesRsp.files) {
+                    final existingStatus =
+                        _sharedFilesStatus[fileMetaFromRsp.fileName];
+                    newStatusMap[fileMetaFromRsp.fileName] = (
+                      sharedFile: fileMetaFromRsp,
+                      receivedBytes:
+                          existingStatus?.receivedBytes ??
+                          0,
+                      isCompletedAndNotified:
+                          existingStatus?.isCompletedAndNotified ??
+                          false,
+                    );
                   }
+                  _sharedFilesStatus = newStatusMap;
 
-                  List<(SharedFile, int)> newMasterList = [];
-                  bool structureChanged = false; 
-
-                  if (filesRsp.files.isEmpty && _sharedFiles.isEmpty) {
-                      print("FileSharingReceiver: GetSharedFilesRsp - Both new and old lists are empty.");
-                  } else {
-                      for (var fileMetaFromRsp in filesRsp.files) {
-                          String key = "${fileMetaFromRsp.fileName}|${fileMetaFromRsp.fileSize}";
-                          int progress = existingProgressMap[key] ?? 0; 
-                          newMasterList.add((fileMetaFromRsp, progress));
-                      }
-
-                      if (newMasterList.length != _sharedFiles.length) {
-                          structureChanged = true;
-                      } else {
-                          for (int i = 0; i < newMasterList.length; i++) {
-                              if (newMasterList[i].$1.fileName != _sharedFiles[i].$1.fileName ||
-                                  newMasterList[i].$1.fileSize != _sharedFiles[i].$1.fileSize) {
-                                  structureChanged = true;
-                                  break;
-                              }
-                          }
-                      }
-                       _sharedFiles = newMasterList; 
-                  }
-                  
-                  if (structureChanged) {
-                      print("FileSharingReceiver: GetSharedFilesRsp - _sharedFiles list structure was updated or reordered.");
-                  } else {
-                      print("FileSharingReceiver: GetSharedFilesRsp - _sharedFiles list structure and progress preserved or initialized empty.");
-                  }
-                  onFileProgress?.call(List.from(_sharedFiles));
-
+                  onFileProgress?.call(
+                    _sharedFilesStatus.values
+                        .map((s) => (s.sharedFile, s.receivedBytes))
+                        .toList(),
+                  );
                 } catch (e, s) {
-                  print("FileSharingReceiver: Error parsing GetSharedFilesRsp: $e\n$s");
+                  print(
+                    "FileSharingReceiver: Error parsing GetSharedFilesRsp: $e\n$s",
+                  );
                   onError?.call("Error processing file list: $e");
                 }
                 break;
@@ -443,136 +388,276 @@ class FileSharingReceiver {
                   onError?.call("Temporary storage path not set. File chunk skipped.");
                   break;
                 }
+                SharedFileContentNotify? fileChunk;
                 try {
-                  final fileChunk = SharedFileContentNotify.fromBuffer(
-                    Uint8List.sublistView(data, payloadOffset, payloadOffset + length),
-                  );
+                  fileChunk = SharedFileContentNotify.fromBuffer(payloadBytes);
                   final SharedFile sharedFileInfoFromChunk = fileChunk.file;
                   final String originalFileName = sharedFileInfoFromChunk.fileName;
                   final fileContent = fileChunk.content;
 
-                  final fileIdx = _sharedFiles.indexWhere(
-                    (f) => f.$1.fileName == originalFileName && f.$1.fileSize == sharedFileInfoFromChunk.fileSize,
+                  var fileStatus = _sharedFilesStatus[originalFileName];
+
+                  // --- MODIFICATION HERE FOR LINGERING SINK CLEANUP ---
+                  if (fileStatus != null && fileStatus.isCompletedAndNotified) {
+                    if (_fileSinks.containsKey(originalFileName)) {
+                        IOSink? existingSink = _fileSinks[originalFileName];
+                        if (existingSink != null) {
+                            print("FileSharingReceiver: Found unexpected, lingering sink for completed file: $originalFileName. Attempting final cleanup.");
+                            try {
+                                // Flush any remaining buffer, then attempt to close.
+                                // It's okay if this throws Bad state, as the primary close likely succeeded.
+                                await existingSink.flush();
+                                await existingSink.close();
+                                print("FileSharingReceiver: Lingering sink for $originalFileName successfully cleaned up.");
+                            } catch (e) {
+                                print("FileSharingReceiver: Error during lingering sink cleanup for $originalFileName: $e");
+                                // **Crucial: Even if close fails, ensure it's removed from the map.**
+                                // This is the most important part to prevent *future* interactions.
+                            } finally {
+                                _fileSinks.remove(originalFileName); // Remove regardless of close success/failure
+                            }
+                        }
+                    }
+                    print("FileSharingReceiver: Ignoring processing for already completed/handled file: $originalFileName. No longer expecting content.");
+                    break; // Stop all further processing for this chunk.
+                  }
+                  // --- END MODIFICATION ---
+
+                  if (fileStatus == null) {
+                    _sharedFilesStatus[originalFileName] = (
+                      sharedFile: sharedFileInfoFromChunk,
+                      receivedBytes: 0,
+                      isCompletedAndNotified: false
+                    );
+                    fileStatus = _sharedFilesStatus[originalFileName];
+                  }
+
+                  var currentReceivedBytes = fileStatus!.receivedBytes + fileContent.length;
+                  _sharedFilesStatus[originalFileName] = (
+                    sharedFile: fileStatus.sharedFile,
+                    receivedBytes: currentReceivedBytes,
+                    isCompletedAndNotified: fileStatus.isCompletedAndNotified
                   );
 
-                  if (fileIdx != -1) {
-                    final String tempFilePath = p.join(_temporaryStoragePath!, '$originalFileName.part');
-                    IOSink sink = _fileSinks[originalFileName] ??= File(tempFilePath).openWrite(mode: FileMode.append);
-                    sink.add(fileContent);
+                  final String tempFilePath = p.join(_temporaryStoragePath!, '$originalFileName.part');
+                  IOSink sink = _fileSinks[originalFileName] ??= File(tempFilePath).openWrite(mode: FileMode.append);
+                  
+                  // Add content to the sink
+                  sink.add(fileContent);
 
-                    var (sharedFileFromList, receivedBytes) = _sharedFiles[fileIdx];
-                    receivedBytes += fileContent.length;
-                    _sharedFiles[fileIdx] = (sharedFileFromList, receivedBytes);
-                    
-                    onFileProgress?.call(List.from(_sharedFiles));
+                  onFileProgress?.call(
+                    _sharedFilesStatus.values.map((s) => (s.sharedFile, s.receivedBytes)).toList()
+                  );
 
-                    if (receivedBytes >= sharedFileFromList.fileSize) {
-                      print('FileSharingReceiver: File $originalFileName received completely to temp. Path: $tempFilePath');
-                      await sink.flush();
-                      await sink.close();
-                      _fileSinks.remove(originalFileName);
-                      onFileReceivedToTemp?.call([sharedFileFromList, tempFilePath]);
+                  // This block handles the *primary* closure of the sink when the file is fully received.
+                  if (currentReceivedBytes >= sharedFileInfoFromChunk.fileSize && !fileStatus.isCompletedAndNotified) {
+                    print('FileSharingReceiver: File $originalFileName received completely to temp. Path: $tempFilePath');
+
+                    _sharedFilesStatus[originalFileName] = (
+                      sharedFile: fileStatus.sharedFile,
+                      receivedBytes: currentReceivedBytes,
+                      isCompletedAndNotified: true
+                    );
+
+                    final sinkToClose = _fileSinks[originalFileName];
+                    if (sinkToClose != null) {
+                      try {
+                        await sinkToClose.flush();
+                        await sinkToClose.close(); // Primary close operation
+                        print("FileSharingReceiver: Sink for $originalFileName successfully closed after full reception.");
+                      } catch (e) {
+                        print("FileSharingReceiver: Primary error closing sink for $originalFileName after completion: $e");
+                        onError?.call("Failed to finalize temporary file for '$originalFileName': $e");
+                      } finally {
+                         // Always ensure it's removed immediately after trying to close.
+                         _fileSinks.remove(originalFileName); 
+                      }
+                    } else {
+                        print("FileSharingReceiver: Warning: Sink for $originalFileName was null after full reception. (Likely race condition)");
                     }
-                  } else {
-                     print("FileSharingReceiver: Received chunk for unknown file: '$originalFileName'. Current files: ${_sharedFiles.map((f)=>f.$1.fileName).toList()}");
+                    onFileReceivedToTemp?.call([fileStatus.sharedFile, tempFilePath]);
                   }
                 } catch (e, s) {
-                  print("FileSharingReceiver: Error processing SharedFileContentNotify: $e\n$s");
-                  onError?.call("Error saving file chunk to temp: $e");
+                  final fileNameForError = fileChunk?.file.fileName ?? 'unknown file';
+                  print("FileSharingReceiver: Error processing SharedFileContentNotify for $fileNameForError: $e\n$s");
+                  onError?.call("Error saving file chunk to temp for $fileNameForError: $e");
+
+                  if (_sharedFilesStatus.containsKey(fileNameForError)) {
+                      _sharedFilesStatus[fileNameForError] = (
+                          sharedFile: _sharedFilesStatus[fileNameForError]!.sharedFile,
+                          receivedBytes: _sharedFilesStatus[fileNameForError]!.receivedBytes,
+                          isCompletedAndNotified: true
+                      );
+                  }
+
+                  final sinkOnError = _fileSinks[fileNameForError];
+                  if (sinkOnError != null) {
+                    try {
+                      await sinkOnError.flush();
+                      await sinkOnError.close();
+                      print("FileSharingReceiver: Sink for $fileNameForError successfully closed on error.");
+                    } catch (closeError) {
+                      print("FileSharingReceiver: Error closing sink for $fileNameForError in error handler: $closeError");
+                    } finally {
+                      _fileSinks.remove(fileNameForError); // Always ensure it's removed
+                    }
+                  }
                 }
                 break;
+
+              case EPacketType.FileTransferCompleteNotify:
+                print(
+                  "FileSharingReceiver: <<< RECEIVED FILE_TRANSFER_COMPLETE_NOTIFY >>>",
+                );
+
+                for (var key in _fileSinks.keys.toList()) {
+                  final sink = _fileSinks[key];
+                  try {
+                    await sink?.flush();
+                    await sink?.close();
+                    print(
+                      "FileSharingReceiver: Closed remaining sink for $key.",
+                    );
+                  } catch (e) {
+                    print(
+                      "FileSharingReceiver: Error closing remaining sink for $key: $e",
+                    );
+                  }
+                }
+                _fileSinks.clear();
+
+                onTransferComplete?.call();
+
+                await _currentClientSocket?.close();
+                print(
+                  "FileSharingReceiver: Client socket closed by receiver after FileTransferCompleteNotify.",
+                );
+                await _socketSubscription?.cancel();
+                _socketSubscription = null;
+                _currentClientSocket = null;
+                break;
+
               default:
-                print("FileSharingReceiver: Invalid EPacketType received: $packetType (byte: $packetTypeByte)");
+                print(
+                  "FileSharingReceiver: Invalid EPacketType received: $packetType (byte: $packetTypeByte)",
+                );
                 break;
             }
+            // Move offset past the processed packet
             offset += headerAndPacketLength;
-            if (offset >= bytes.lengthInBytes) {
-                tempBuf = null; break;
-            }
+          }
+
+          // If there's remaining data after processing all complete packets,
+          // create a new _incomingBuffer with just the remaining part.
+          if (offset < _incomingBuffer.lengthInBytes) {
+            _incomingBuffer = Uint8List.sublistView(_incomingBuffer, offset);
+          } else {
+            _incomingBuffer = Uint8List(0); // All data processed, clear buffer
           }
         },
-        onDone: () {
-          print('FileSharingReceiver: Connection closed by client: ${socket.remoteAddress.address}:${socket.remotePort}');
+        onDone: () async {
+          print(
+            'FileSharingReceiver: Socket listener onDone: Connection closed by sender or network. Client: ${_currentClientSocket?.remoteAddress.address}:${_currentClientSocket?.remotePort}',
+          );
+
+          bool allFilesActuallyCompleted = _sharedFilesStatus.values.every(
+            (e) => e.isCompletedAndNotified,
+          );
+
+          if (!allFilesActuallyCompleted && _sharedFilesStatus.isNotEmpty) {
+            onError?.call(
+              'Connection closed unexpectedly during transfer. Not all files may have been sent.',
+            );
+          }
+
+          for (var key in _fileSinks.keys.toList()) {
+            final sink = _fileSinks[key];
+            if (sink != null) {
+              try {
+                await sink.close();
+              } catch (e) {
+                print(
+                  "FileSharingReceiver: Error closing sink for $key in onDone: $e",
+                );
+              }
+            }
+          }
+          _fileSinks.clear();
+          _sharedFilesStatus.clear();
+          _incomingBuffer = Uint8List(0);
+
+          _currentClientSocket = null;
+          _socketSubscription = null;
         },
-        onError: (error, stackTrace) {
+        onError: (error, stackTrace) async {
           print('FileSharingReceiver: Socket error: $error\n$stackTrace');
-          socket.destroy();
-          onError?.call("Network connection error: $error");
+          _currentClientSocket?.destroy();
+          _currentClientSocket = null;
+          _socketSubscription?.cancel();
+          _socketSubscription = null;
+          onError?.call("Network connection error during receive: $error");
+
+          for (var key in _fileSinks.keys.toList()) {
+            final sink = _fileSinks[key];
+            if (sink != null) {
+              try {
+                await sink.close();
+              } catch (e) {
+                print(
+                  "FileSharingReceiver: Error closing sink for $key in onError: $e",
+                );
+              }
+            }
+          }
+          _fileSinks.clear();
+          _sharedFilesStatus.clear();
+          _incomingBuffer = Uint8List(0);
         },
         cancelOnError: true,
       );
 
       try {
-        print("FileSharingReceiver: Sending GetSharedFilesReq to ${socket.remoteAddress.address}");
+        print(
+          "FileSharingReceiver: Sending GetSharedFilesReq to ${_currentClientSocket?.remoteAddress.address}",
+        );
         final packet = makePacket(EPacketType.GetSharedFilesReq);
-        socket.add(Uint8List.sublistView(packet));
+        _currentClientSocket?.add(Uint8List.sublistView(packet));
+        _currentClientSocket?.flush();
       } catch (e) {
         print("FileSharingReceiver: Error sending GetSharedFilesReq: $e");
-        onError?.call("Failed to request file list: $e");
+        onError?.call("Failed to request file list from sender: $e");
       }
     });
   }
 
-  // MODIFIED: This function now handles file name collisions.
-  Future<String?> finalizeSave(String tempFilePathWithPart, String originalFileName) async {
-    final File tempFile = File(tempFilePathWithPart);
-    if (!await tempFile.exists()) {
-      onError?.call("Temporary file '$tempFilePathWithPart' not found for '$originalFileName'.");
+  Future<String?> finalizeSave(
+    String tempFilePathWithPart,
+    String originalFileName,
+    int fileSize,
+    String senderId,
+    String senderName,
+    String receiverUserId,
+    ui.RootIsolateToken rootIsolateToken, // ADD THIS PARAMETER
+  ) async {
+    final Map<String, dynamic> params = {
+      'tempFilePathWithPart': tempFilePathWithPart,
+      'originalFileName': originalFileName,
+      'fileSize': fileSize,
+      'senderId': senderId,
+      'senderName': senderName,
+      'receiverUserId': receiverUserId,
+      '_appId': _appId,
+      'rootIsolateToken': rootIsolateToken, // PASS THE TOKEN HERE
+    };
+
+    final result = await Isolate.run(
+      () => _performFinalizeSaveInIsolate(params),
+    );
+
+    if (result != null && result.startsWith("Error:")) {
+      onError?.call(result.substring(7));
       return null;
     }
-
-    try {
-      Directory? downloadsDir;
-      if (Platform.isAndroid) {
-        downloadsDir = await getDownloadsDirectory();
-      } else if (Platform.isIOS) {
-        downloadsDir = await getApplicationDocumentsDirectory();
-      } else {
-        downloadsDir = await getDownloadsDirectory();
-      }
-      
-      if (downloadsDir == null) {
-        print("FileSharingReceiver: Could not determine a writable directory.");
-        onError?.call("Could not determine a writable directory for '$originalFileName'.");
-        return null;
-      }
-
-      // --- MODIFIED: Renaming Logic ---
-      String finalPath = p.join(downloadsDir.path, originalFileName);
-      String baseName = p.basenameWithoutExtension(originalFileName);
-      String extension = p.extension(originalFileName);
-      int count = 1;
-
-      // Loop to find a unique file name.
-      while (await File(finalPath).exists()) {
-        String newName = '$baseName ($count)$extension';
-        finalPath = p.join(downloadsDir.path, newName);
-        count++;
-      }
-      // --- End of Renaming Logic ---
-      
-      print("FileSharingReceiver: Reading temporary file '$tempFilePathWithPart'.");
-      final Uint8List fileBytes = await tempFile.readAsBytes();
-      
-      print("FileSharingReceiver: Attempting to save file to: '$finalPath'");
-      final File finalFile = File(finalPath);
-      await finalFile.writeAsBytes(fileBytes);
-
-      print("FileSharingReceiver: File saved successfully to: '$finalPath'");
-      await tempFile.delete();
-      print("FileSharingReceiver: Temporary file '$tempFilePathWithPart' deleted.");
-      return finalPath; // Return the actual path where the file was saved
-
-    } catch (e, s) {
-      print("FileSharingReceiver: Error during finalizeSave: $e\n$s");
-      String errorMessage = "Failed to save '$originalFileName': $e";
-       if (Platform.isAndroid && e is FileSystemException) {
-         if (e.osError?.errorCode == 13 || e.osError?.errorCode == 1) { // EACCES or EPERM
-             errorMessage = "Failed to save '$originalFileName' due to permission issues on Android.";
-         }
-       }
-      onError?.call(errorMessage);
-      return null;
-    }
+    return result;
   }
 }

@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_shareit/protos/sharethem.pb.dart';
-import 'package:flutter_shareit/utils/file_sharing/file_sharing_receiver.dart';
-import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
+import 'dart:io';
+import 'dart:math';
 import 'package:open_file/open_file.dart';
-import 'package:flutter_shareit/utils/file_utils.dart';
+import 'package:path/path.dart' as p;
+import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 
-
-// --- Definition for ReceiveScreen ---
+// Your project-specific imports
+import 'package:flutter_shareit/protos/sharethem.pb.dart';
+import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
+import 'package:flutter_shareit/utils/file_sharing/file_sharing_receiver.dart';
+import 'package:flutter_shareit/utils/auth_utils.dart';
+import 'package:flutter_shareit/models/received_file_item.dart';
 
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});
@@ -17,42 +22,95 @@ class ReceiveScreen extends StatefulWidget {
 
 class _ReceiveScreenState extends State<ReceiveScreen> {
   bool _discoverable = SharingDiscoveryService.isDiscoverable;
-  List<(SharedFile, int)> _sharedFiles = [];
+  List<ReceivedFileItem> _receivedFiles = [];
   bool _receivingBegun = false;
+  bool _transferComplete = false;
   late FileSharingReceiver _receiver;
 
-  final Map<String, String> _tempFilePaths = {};
-  // State untuk file yang berhasil disimpan
-  final List<Map<String, String>> _successfullySavedFilesData = [];
   String _errorMessage = "";
+
+  final AuthenticationService _authService = AuthenticationService();
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
+    _currentUserId = _authService.getCurrentUserId();
+
     _receiver = FileSharingReceiver(
-      onFileProgress: (files) {
+      onFileProgress: (fileProgressList) {
         if (!mounted) return;
         setState(() {
           _receivingBegun = true;
-          _sharedFiles = files;
           _errorMessage = "";
+          _transferComplete = false;
+
+          Map<String, ReceivedFileItem> existingFilesMap = {
+            for (var item in _receivedFiles) item.sharedFile.fileName: item
+          };
+
+          List<ReceivedFileItem> newReceivedFilesList = [];
+          for (var tuple in fileProgressList) {
+            final SharedFile sharedFile = tuple.$1;
+            final int receivedBytes = tuple.$2;
+
+            ReceivedFileItem? existingItem = existingFilesMap[sharedFile.fileName];
+            if (existingItem != null) {
+              // Ensure we copy from the *existing* item in the map,
+              // preserving any 'isSaving' or 'errorMessage' flags that might have been set
+              newReceivedFilesList.add(existingItem.copyWith(
+                receivedBytes: receivedBytes,
+                // Do not reset isSaving or errorMessage here;
+                // _saveFilePermanently handles those for its specific item
+              ));
+            } else {
+              newReceivedFilesList.add(ReceivedFileItem(
+                sharedFile: sharedFile,
+                receivedBytes: receivedBytes,
+              ));
+            }
+          }
+          _receivedFiles = newReceivedFilesList;
         });
       },
       onFileReceivedToTemp: (fileData) {
         if (!mounted) return;
-        SharedFile file = fileData[0] as SharedFile;
+        SharedFile fileMeta = fileData[0] as SharedFile;
         String tempPath = fileData[1] as String;
+
+        // Find the item by its unique properties, not by object reference
+        final index = _receivedFiles.indexWhere((item) =>
+            item.sharedFile.fileName == fileMeta.fileName &&
+            item.sharedFile.fileSize == fileMeta.fileSize);
+
+        if (index != -1) {
+          // Copy from the current item in the list
+          _receivedFiles[index] = _receivedFiles[index].copyWith(
+            tempFilePath: tempPath,
+            receivedBytes: fileMeta.fileSize.toInt(),
+          );
+          setState(() {
+            // State updated, now UI will rebuild to show 'Save' button.
+          });
+          print("ReceiveScreen: File '${fileMeta.fileName}' ready to save, temp path set.");
+        } else {
+          print("ReceiveScreen: onFileReceivedToTemp: Received file meta for unknown file: ${fileMeta.fileName}");
+        }
+      },
+      onTransferComplete: () {
+        if (!mounted) return;
         setState(() {
-          _tempFilePaths[file.fileName] = tempPath;
-          final index = _sharedFiles.indexWhere((f) => f.$1.fileName == file.fileName);
-          if (index != -1) {
-            if (_sharedFiles[index].$2 < file.fileSize) {
-              _sharedFiles[index] = (file, file.fileSize.toInt());
-            }
-          } else {
-            _sharedFiles.add((file, file.fileSize.toInt()));
-          }
+          _transferComplete = true;
+          _receivingBegun = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All files received!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        SharingDiscoveryService.stopBroadcast();
       },
       onError: (message) {
         if (!mounted) return;
@@ -66,12 +124,125 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         );
         setState(() {
           _errorMessage = message;
+          _transferComplete = false;
+          // Optionally, set error state for specific file if possible, e.g.,
+          // if (message.contains("for file X")) {
+          //   final fileName = extractFileNameFromMessage(message);
+          //   final index = _receivedFiles.indexWhere((item) => item.sharedFile.fileName == fileName);
+          //   if (index != -1) {
+          //     _receivedFiles[index] = _receivedFiles[index].copyWith(
+          //       isSaving: false,
+          //       errorMessage: message,
+          //     );
+          //   }
+          // }
         });
       },
     );
   }
-  
-  // ADDED: Helper function to open a file.
+
+  Future<void> _saveFilePermanently(ReceivedFileItem itemToSave) async {
+    if (_currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("User not logged in. Cannot save file.")),
+      );
+      return;
+    }
+    if (itemToSave.tempFilePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Temporary file path is missing.")),
+      );
+      return;
+    }
+    if (itemToSave.isSaving) { // Check the passed item's saving state
+      print("ReceiveScreen: Already saving ${itemToSave.sharedFile.fileName}");
+      return;
+    }
+
+    // Find the item in the current list using a unique identifier
+    // This is crucial because _receivedFiles might have been rebuilt by other callbacks
+    final int initialIndex = _receivedFiles.indexWhere(
+      (element) => element.sharedFile.fileName == itemToSave.sharedFile.fileName &&
+                   element.sharedFile.fileSize == itemToSave.sharedFile.fileSize,
+    );
+
+    if (initialIndex != -1) {
+      setState(() {
+        _receivedFiles[initialIndex] = _receivedFiles[initialIndex].copyWith(
+          isSaving: true,
+          errorMessage: null,
+        );
+      });
+    } else {
+      print("ReceiveScreen: Warning: Item to save not found in _receivedFiles list for initial state update.");
+      // Potentially add a snackbar for this unexpected case if it happens often.
+      return; // Abort if we can't find the item to update its state
+    }
+
+
+    final ui.RootIsolateToken? rootIsolateToken = ServicesBinding.rootIsolateToken;
+
+    if (rootIsolateToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error: Could not obtain RootIsolateToken. Cannot save file.")),
+      );
+      // Ensure saving state is reset if we abort here
+      if (initialIndex != -1) {
+        setState(() {
+          _receivedFiles[initialIndex] = _receivedFiles[initialIndex].copyWith(
+            isSaving: false,
+            errorMessage: "Missing isolate token",
+          );
+        });
+      }
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    String? finalPathResult = await _receiver.finalizeSave(
+      itemToSave.tempFilePath!, // Use the passed item's temp path
+      itemToSave.sharedFile.fileName,
+      itemToSave.sharedFile.fileSize.toInt(),
+      itemToSave.sharedFile.senderId,
+      itemToSave.sharedFile.senderName,
+      _currentUserId!,
+      rootIsolateToken,
+    );
+
+    if (!mounted) return;
+
+    // Find the item again after save completes, as list might have changed
+    final int finalIndex = _receivedFiles.indexWhere(
+      (element) => element.sharedFile.fileName == itemToSave.sharedFile.fileName &&
+                   element.sharedFile.fileSize == itemToSave.sharedFile.fileSize,
+    );
+
+    setState(() {
+      if (finalIndex != -1) {
+        if (finalPathResult != null && !finalPathResult.startsWith("Error:")) {
+          _receivedFiles[finalIndex] = _receivedFiles[finalIndex].copyWith(
+            finalPath: finalPathResult,
+            isSaving: false, // <-- Set to false
+            errorMessage: null,
+          );
+          messenger.showSnackBar(
+              SnackBar(content: Text("${p.basename(finalPathResult)} saved!")));
+        } else {
+          _receivedFiles[finalIndex] = _receivedFiles[finalIndex].copyWith(
+            isSaving: false, // <-- Set to false
+            errorMessage: finalPathResult?.substring(7) ?? "Unknown save error",
+          );
+          messenger.showSnackBar(
+              SnackBar(content: Text("Failed to save ${itemToSave.sharedFile.fileName}.")),
+          );
+        }
+      } else {
+          print("ReceiveScreen: Error: Item to save not found in _receivedFiles list for final state update.");
+          // If the item somehow disappeared, the UI might be out of sync.
+      }
+    });
+  }
+
   Future<void> _openFile(String filePath, String fileName) async {
     final result = await OpenFile.open(filePath);
     if (result.type != ResultType.done && mounted) {
@@ -82,6 +253,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     }
   }
 
+  String fileSizeToHuman(int bytes, {int decimals = 2}) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    var i = (log(bytes) / log(1024)).floor();
+    return '${(bytes / pow(1024, i)).toStringAsFixed(decimals)} ${suffixes[i]}';
+  }
 
   @override
   void dispose() {
@@ -92,8 +269,29 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_currentUserId == null) {
+      return const Center(
+        child: Text(
+          "Please log in to receive files.",
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      );
+    }
+
+    String statusText;
+    if (_errorMessage.isNotEmpty) {
+      statusText = "Error: $_errorMessage";
+    } else if (_transferComplete) {
+      statusText = "Transfer Complete!";
+    } else if (_receivingBegun) {
+      statusText = "Receiving files...";
+    } else if (_discoverable) {
+      statusText = "Waiting for sender...";
+    } else {
+      statusText = "Press 'Start Receiving'";
+    }
+
     return Scaffold(
-      // The AppBar is managed by HomePage, so it's removed from here.
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -108,37 +306,27 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                _discoverable
-                    ? "Waiting for sender..."
-                    : (_receivingBegun ? "Receiving files..." : "Press 'Start Receiving'"),
+                statusText,
                 style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
               ),
-              if (_errorMessage.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(_errorMessage, style: const TextStyle(color: Colors.red, fontSize: 12)),
-              ],
               const SizedBox(height: 20),
               Text("Incoming Files:", style: Theme.of(context).textTheme.titleSmall),
               Expanded(
                 flex: 2,
                 child: Card(
                   elevation: 2,
-                  child: _sharedFiles.isEmpty
+                  child: _receivedFiles.isEmpty
                       ? const Center(child: Text("Ready to receive. Files will appear here."))
                       : ListView.builder(
-                          itemCount: _sharedFiles.length,
+                          itemCount: _receivedFiles.length,
                           itemBuilder: (_, i) {
-                            final fileTuple = _sharedFiles[i];
-                            final sharedFile = fileTuple.$1;
-                            final receivedBytes = fileTuple.$2;
-                            final progress = (sharedFile.fileSize == 0)
-                                ? 0.0
-                                : (receivedBytes / sharedFile.fileSize);
-                            final bool isSaved = _successfullySavedFilesData.any((savedFile) => savedFile['name'] == sharedFile.fileName);
-                            final bool isReadyToSave = _tempFilePaths.containsKey(sharedFile.fileName);
+                            final item = _receivedFiles[i];
 
                             Widget trailingWidget;
-                            if (isSaved) {
+                            if (item.hasError) {
+                              trailingWidget = const Icon(Icons.error, color: Colors.red);
+                            } else if (item.isPermanentlySaved) {
                               trailingWidget = Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -146,49 +334,37 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                   Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
                                 ],
                               );
-                            } else if (isReadyToSave) {
+                            } else if (item.isSaving) { // This is the state we are trying to manage
+                              trailingWidget = const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              );
+                            } else if (item.isTempComplete) {
                               trailingWidget = ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   textStyle: const TextStyle(fontSize: 13),
                                 ),
-                                onPressed: () async {
-                                  String? tempPath = _tempFilePaths[sharedFile.fileName];
-                                  if (tempPath == null) return;
-
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  String? finalPath = await _receiver.finalizeSave(tempPath, sharedFile.fileName);
-
-                                  if (finalPath != null && finalPath.isNotEmpty) {
-                                    messenger.showSnackBar(SnackBar(content: Text("${sharedFile.fileName} saved! Path: $finalPath")));
-                                    if (!mounted) return;
-                                    setState(() {
-                                      if (!_successfullySavedFilesData.any((f) => f['name'] == sharedFile.fileName)) {
-                                        _successfullySavedFilesData.add({'name': sharedFile.fileName, 'path': finalPath});
-                                      }
-                                    });
-                                  } else {
-                                    messenger.showSnackBar(SnackBar(content: Text("Failed to save ${sharedFile.fileName}.")));
-                                  }
-                                },
+                                onPressed: () => _saveFilePermanently(item),
                                 child: const Text("Save"),
                               );
                             } else {
-                              trailingWidget = Text("${(progress * 100).toStringAsFixed(0)}%");
+                              trailingWidget = Text("${(item.progress * 100).toStringAsFixed(0)}%");
                             }
 
                             return ListTile(
                               leading: const Icon(Icons.description),
-                              title: Text(sharedFile.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text('Size: ${fileSizeToHuman(sharedFile.fileSize)}'),
+                              title: Text(item.sharedFile.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: Text(
+                                  'Sent from: ${item.sharedFile.senderName} - Size: ${fileSizeToHuman(item.sharedFile.fileSize.toInt())} ${item.hasError ? "(Error: ${item.errorMessage})" : ""}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                              ),
                               trailing: trailingWidget,
-                              // MODIFIED: Added onTap functionality
-                              onTap: isSaved
-                                  ? () {
-                                      final savedFile = _successfullySavedFilesData.firstWhere((f) => f['name'] == sharedFile.fileName);
-                                      _openFile(savedFile['path']!, savedFile['name']!);
-                                    }
-                                  : null, // ListTile is not tappable until the file is saved.
+                              onTap: item.isPermanentlySaved
+                                  ? () => _openFile(item.finalPath!, p.basename(item.finalPath!))
+                                  : null,
                             );
                           },
                         ),
@@ -201,14 +377,17 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                     setState(() {
                       _discoverable = false;
                       _receivingBegun = false;
+                      _transferComplete = false;
+                      _errorMessage = "";
+                      _receivedFiles.clear();
                     });
                     await SharingDiscoveryService.stopBroadcast();
                     await _receiver.stop();
                   } else {
                     setState(() {
-                      _sharedFiles.clear();
-                      _tempFilePaths.clear();
+                      _receivedFiles.clear();
                       _receivingBegun = false;
+                      _transferComplete = false;
                       _errorMessage = "";
                     });
                     await _receiver.start();

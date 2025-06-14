@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -12,13 +13,27 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    _checkLoginStatus(); // Call the new method to check login status
+  }
 
-    // Delay splash screen for 3 seconds, then navigate
-    Future.delayed(const Duration(seconds: 6), () {
-      Navigator.pushReplacementNamed(context, '/login');
+  void _checkLoginStatus() async {
+    // Keep the delay to show your Lottie animation for a few seconds
+    await Future.delayed(const Duration(seconds: 6));
+
+    // Listen to Firebase Authentication state changes
+    // This stream provides the current user (if logged in) or null (if not).
+    // It also handles the app restarting and Firebase automatically restoring a session.
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      if (user == null) {
+        // User is currently signed out. Navigate to LoginPage.
+        Navigator.of(context).pushReplacementNamed('/login');
+      } else {
+        // User is signed in. Navigate to HomePage.
+        Navigator.of(context).pushReplacementNamed('/home');
+      }
     });
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

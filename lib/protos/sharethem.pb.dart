@@ -121,11 +121,15 @@ class SharedFile extends $pb.GeneratedMessage {
     $core.String? fileName,
     $core.int? fileSize,
     $core.int? fileCrc,
+    $core.String? senderId,
+    $core.String? senderName,
   }) {
     final result = create();
     if (fileName != null) result.fileName = fileName;
     if (fileSize != null) result.fileSize = fileSize;
     if (fileCrc != null) result.fileCrc = fileCrc;
+    if (senderId != null) result.senderId = senderId;
+    if (senderName != null) result.senderName = senderName;
     return result;
   }
 
@@ -138,6 +142,8 @@ class SharedFile extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'fileName')
     ..a<$core.int>(2, _omitFieldNames ? '' : 'fileSize', $pb.PbFieldType.OU3)
     ..a<$core.int>(3, _omitFieldNames ? '' : 'fileCrc', $pb.PbFieldType.OU3)
+    ..aOS(4, _omitFieldNames ? '' : 'senderId')
+    ..aOS(5, _omitFieldNames ? '' : 'senderName')
     ..hasRequiredFields = false
   ;
 
@@ -184,6 +190,25 @@ class SharedFile extends $pb.GeneratedMessage {
   $core.bool hasFileCrc() => $_has(2);
   @$pb.TagNumber(3)
   void clearFileCrc() => $_clearField(3);
+
+  /// ADD THESE TWO NEW FIELDS
+  @$pb.TagNumber(4)
+  $core.String get senderId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set senderId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSenderId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSenderId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get senderName => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set senderName($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasSenderName() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearSenderName() => $_clearField(5);
 }
 
 

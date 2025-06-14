@@ -47,11 +47,14 @@ const SharedFile$json = {
     {'1': 'file_name', '3': 1, '4': 1, '5': 9, '10': 'fileName'},
     {'1': 'file_size', '3': 2, '4': 1, '5': 13, '10': 'fileSize'},
     {'1': 'file_crc', '3': 3, '4': 1, '5': 13, '10': 'fileCrc'},
+    {'1': 'sender_id', '3': 4, '4': 1, '5': 9, '10': 'senderId'},
+    {'1': 'sender_name', '3': 5, '4': 1, '5': 9, '10': 'senderName'},
   ],
 };
 
 /// Descriptor for `SharedFile`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List sharedFileDescriptor = $convert.base64Decode(
     'CgpTaGFyZWRGaWxlEhsKCWZpbGVfbmFtZRgBIAEoCVIIZmlsZU5hbWUSGwoJZmlsZV9zaXplGA'
-    'IgASgNUghmaWxlU2l6ZRIZCghmaWxlX2NyYxgDIAEoDVIHZmlsZUNyYw==');
+    'IgASgNUghmaWxlU2l6ZRIZCghmaWxlX2NyYxgDIAEoDVIHZmlsZUNyYxIbCglzZW5kZXJfaWQY'
+    'BCABKAlSCHNlbmRlcklkEh8KC3NlbmRlcl9uYW1lGAUgASgJUgpzZW5kZXJOYW1l');
 
