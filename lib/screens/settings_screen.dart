@@ -533,24 +533,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   fillColor: Colors.grey[50],
                                 ),
                               ),
+// Kode Tombol Update Profile versi kecil
                               const SizedBox(height: 24),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: _updateProfile,
-                                  icon: const Icon(Icons.save),
-                                  label: const Text('Update Profile'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF8E44AD),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                              Align(
+                                alignment: Alignment.center, // Posisikan ke tengah
+                                child: GestureDetector(
+                                  onTap: _updateProfile,
+                                  child: Container(
+                                    constraints: const BoxConstraints(maxWidth: 250), // Lebar maksimal
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
                                     ),
-                                    textStyle: const TextStyle(fontSize: 16),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: const [
+                                        Icon(Icons.save, color: Colors.white, size: 18),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Update Profile',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
+
                               const SizedBox(height: 30),
 
                               if (_currentUser != null && _currentUser!.providerData.any((info) => info.providerId == 'password'))
@@ -631,57 +650,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: isWideScreen ? double.infinity : 250),
+                        constraints: BoxConstraints(maxWidth: 250),
                         child: Column(
                           children: [
-                            Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                ),
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              child: ElevatedButton(
-                                onPressed: _handleAuthButtonPress,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  padding: const EdgeInsets.symmetric(vertical: 18),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
+                            GestureDetector(
+                              onTap: _handleAuthButtonPress,
+                              child: Container(
+                                width: 115,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFE5484A), Color(0xFFCD2427)],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
                                   ),
-                                  textStyle: const TextStyle(fontSize: 18),
+                                  borderRadius: BorderRadius.circular(10), // disesuaikan agar serasi
                                 ),
-                                child: Text(
-                                  _currentUser != null ? "Logout" : "Login",
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                child: Center(
+                                  child: Text(
+                                    _currentUser != null ? "Logout" : "Login",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 15),
-                            if (widget.onClose != null)
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton(
-                                  onPressed: widget.onClose,
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.grey[700],
-                                    side: BorderSide(color: Colors.grey.shade400),
-                                    padding: const EdgeInsets.symmetric(vertical: 18),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(30),
-                                    ),
-                                    textStyle: const TextStyle(fontSize: 18),
-                                  ),
-                                  child: const Text("Close"),
-                                ),
-                              ),
                           ],
                         ),
                       ),
+
                       SizedBox(
                           height: MediaQuery.of(context).padding.bottom > 0
                               ? MediaQuery.of(context).padding.bottom
@@ -795,7 +795,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               right: 0,
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFAA88CC),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                 ),

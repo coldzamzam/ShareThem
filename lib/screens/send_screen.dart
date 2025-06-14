@@ -11,7 +11,7 @@ import 'package:flutter_shareit/utils/file_sharing/file_sharing_sender.dart';
 import 'package:flutter_shareit/utils/file_utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import '../utils/sharing_discovery_service.dart'; // Adjust path if needed
+import '../utils/sharing_discovery_service.dart';
 
 class SendScreen extends StatefulWidget {
   const SendScreen({super.key});
@@ -54,21 +54,18 @@ class _SendScreenState extends State<SendScreen> {
           }
           await ws.close();
 
-          print("done crc: ${crc.hash}");
-
           setState(() {
             _selectedFiles.add((
-              SharedFile(
-                fileName: file.name,
-                fileSize: file.size,
-                fileCrc: crc.hash,
-              ),
-              File(tmpFile).openRead(),
+            SharedFile(
+              fileName: file.name,
+              fileSize: file.size,
+              fileCrc: crc.hash,
+            ),
+            File(tmpFile).openRead(),
             ));
           });
         }
       } else {
-        // User canceled the picker
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -78,7 +75,6 @@ class _SendScreenState extends State<SendScreen> {
         );
       }
     } catch (e) {
-      print("Error picking file: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -87,7 +83,9 @@ class _SendScreenState extends State<SendScreen> {
         ),
       );
     } finally {
-      _loading = false;
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
@@ -108,13 +106,13 @@ class _SendScreenState extends State<SendScreen> {
           children: [
             _loading
                 ? Padding(
-                      padding: EdgeInsets.all(10),
-                      child: SizedBox(
-                      height: 80,
-                      width: 80,
-                      child: CircularProgressIndicator(),
-                    ),
-                  )
+              padding: const EdgeInsets.all(10),
+              child: const SizedBox(
+                height: 80,
+                width: 80,
+                child: CircularProgressIndicator(),
+              ),
+            )
                 : Icon(Icons.upload_file, size: 100, color: Colors.grey[400]),
             Expanded(
               child: Padding(
@@ -125,26 +123,26 @@ class _SendScreenState extends State<SendScreen> {
                     children: _selectedFiles
                         .mapIndexed(
                           (i, entry) => ListTile(
-                            leading: const Icon(Icons.description),
-                            title: Text(
-                              entry.$1.fileName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Size: ${fileSizeToHuman(entry.$1.fileSize)}',
-                            ),
-                            trailing: IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedFiles.removeAt(i);
-                                });
-                              },
-                              icon: const Icon(Icons.close),
-                            ),
+                        leading: const Icon(Icons.description),
+                        title: Text(
+                          entry.$1.fileName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
                           ),
-                        )
+                        ),
+                        subtitle: Text(
+                          'Size: ${fileSizeToHuman(entry.$1.fileSize)}',
+                        ),
+                        trailing: IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedFiles.removeAt(i);
+                            });
+                          },
+                          icon: const Icon(Icons.close),
+                        ),
+                      ),
+                    )
                         .toList(),
                   ),
                 ),
@@ -156,39 +154,45 @@ class _SendScreenState extends State<SendScreen> {
               runSpacing: 10,
               children: [
                 if (!SharingDiscoveryService.isSearching)
-                  ElevatedButton.icon(
-                    onPressed: _pickFiles,
-                    icon: const Icon(Icons.attach_file),
-                    label: Text(
-                      _selectedFiles.isNotEmpty
-                          ? 'Add More Files'
-                          : 'Select Files',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 30,
-                        vertical: 15,
+                  GestureDetector(
+                    onTap: _pickFiles,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.attach_file, color: Colors.white, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            _selectedFiles.isNotEmpty ? 'Add More Files' : 'Select Files',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 if (_selectedFiles.isNotEmpty && !_loading)
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final receiver = await showSelectReceiverDialog(
-                        context: context,
-                      );
-                      print("select receiver dialog ret: $receiver");
+                  GestureDetector(
+                    onTap: () async {
+                      final receiver = await showSelectReceiverDialog(context: context);
                       if (receiver is ResolvedBonsoirService) {
                         fileSharingSender = FileSharingSender(
                           files: _selectedFiles,
                           serverHost: receiver.host!,
                           serverPort: receiver.port,
                         );
-                        print("starting filesharingsender");
                         await fileSharingSender?.start();
                       } else if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -200,21 +204,31 @@ class _SendScreenState extends State<SendScreen> {
                       }
                       await SharingDiscoveryService.stopDiscovery();
                     },
-                    icon: const Icon(Icons.send),
-                    label: const Text(
-                      'Send Files',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 30,
-                        vertical: 15,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.send, color: Colors.white, size: 18),
+                          SizedBox(width: 6),
+                          Text(
+                            'Send Files',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                     ),
                   ),
               ],

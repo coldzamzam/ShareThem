@@ -5,9 +5,6 @@ import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
 import 'package:open_file/open_file.dart';
 import 'package:flutter_shareit/utils/file_utils.dart';
 
-
-// --- Definition for ReceiveScreen ---
-
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});
 
@@ -22,7 +19,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   late FileSharingReceiver _receiver;
 
   final Map<String, String> _tempFilePaths = {};
-  // State untuk file yang berhasil disimpan
   final List<Map<String, String>> _successfullySavedFilesData = [];
   String _errorMessage = "";
 
@@ -70,8 +66,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       },
     );
   }
-  
-  // ADDED: Helper function to open a file.
+
   Future<void> _openFile(String filePath, String fileName) async {
     final result = await OpenFile.open(filePath);
     if (result.type != ResultType.done && mounted) {
@@ -81,7 +76,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       ));
     }
   }
-
 
   @override
   void dispose() {
@@ -93,7 +87,6 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // The AppBar is managed by HomePage, so it's removed from here.
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -126,77 +119,77 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                   child: _sharedFiles.isEmpty
                       ? const Center(child: Text("Ready to receive. Files will appear here."))
                       : ListView.builder(
-                          itemCount: _sharedFiles.length,
-                          itemBuilder: (_, i) {
-                            final fileTuple = _sharedFiles[i];
-                            final sharedFile = fileTuple.$1;
-                            final receivedBytes = fileTuple.$2;
-                            final progress = (sharedFile.fileSize == 0)
-                                ? 0.0
-                                : (receivedBytes / sharedFile.fileSize);
-                            final bool isSaved = _successfullySavedFilesData.any((savedFile) => savedFile['name'] == sharedFile.fileName);
-                            final bool isReadyToSave = _tempFilePaths.containsKey(sharedFile.fileName);
+                    itemCount: _sharedFiles.length,
+                    itemBuilder: (_, i) {
+                      final fileTuple = _sharedFiles[i];
+                      final sharedFile = fileTuple.$1;
+                      final receivedBytes = fileTuple.$2;
+                      final progress = (sharedFile.fileSize == 0)
+                          ? 0.0
+                          : (receivedBytes / sharedFile.fileSize);
+                      final bool isSaved = _successfullySavedFilesData.any((savedFile) => savedFile['name'] == sharedFile.fileName);
+                      final bool isReadyToSave = _tempFilePaths.containsKey(sharedFile.fileName);
 
-                            Widget trailingWidget;
-                            if (isSaved) {
-                              trailingWidget = Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text("Saved ", style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                                  Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
-                                ],
-                              );
-                            } else if (isReadyToSave) {
-                              trailingWidget = ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  textStyle: const TextStyle(fontSize: 13),
-                                ),
-                                onPressed: () async {
-                                  String? tempPath = _tempFilePaths[sharedFile.fileName];
-                                  if (tempPath == null) return;
+                      Widget trailingWidget;
+                      if (isSaved) {
+                        trailingWidget = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text("Saved ", style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                            Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
+                          ],
+                        );
+                      } else if (isReadyToSave) {
+                        trailingWidget = ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            textStyle: const TextStyle(fontSize: 13),
+                          ),
+                          onPressed: () async {
+                            String? tempPath = _tempFilePaths[sharedFile.fileName];
+                            if (tempPath == null) return;
 
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  String? finalPath = await _receiver.finalizeSave(tempPath, sharedFile.fileName);
+                            final messenger = ScaffoldMessenger.of(context);
+                            String? finalPath = await _receiver.finalizeSave(tempPath, sharedFile.fileName);
 
-                                  if (finalPath != null && finalPath.isNotEmpty) {
-                                    messenger.showSnackBar(SnackBar(content: Text("${sharedFile.fileName} saved! Path: $finalPath")));
-                                    if (!mounted) return;
-                                    setState(() {
-                                      if (!_successfullySavedFilesData.any((f) => f['name'] == sharedFile.fileName)) {
-                                        _successfullySavedFilesData.add({'name': sharedFile.fileName, 'path': finalPath});
-                                      }
-                                    });
-                                  } else {
-                                    messenger.showSnackBar(SnackBar(content: Text("Failed to save ${sharedFile.fileName}.")));
-                                  }
-                                },
-                                child: const Text("Save"),
-                              );
+                            if (finalPath != null && finalPath.isNotEmpty) {
+                              messenger.showSnackBar(SnackBar(content: Text("${sharedFile.fileName} saved! Path: $finalPath")));
+                              if (!mounted) return;
+                              setState(() {
+                                if (!_successfullySavedFilesData.any((f) => f['name'] == sharedFile.fileName)) {
+                                  _successfullySavedFilesData.add({'name': sharedFile.fileName, 'path': finalPath});
+                                }
+                              });
                             } else {
-                              trailingWidget = Text("${(progress * 100).toStringAsFixed(0)}%");
+                              messenger.showSnackBar(SnackBar(content: Text("Failed to save ${sharedFile.fileName}.")));
                             }
-
-                            return ListTile(
-                              leading: const Icon(Icons.description),
-                              title: Text(sharedFile.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text('Size: ${fileSizeToHuman(sharedFile.fileSize)}'),
-                              trailing: trailingWidget,
-                              // MODIFIED: Added onTap functionality
-                              onTap: isSaved
-                                  ? () {
-                                      final savedFile = _successfullySavedFilesData.firstWhere((f) => f['name'] == sharedFile.fileName);
-                                      _openFile(savedFile['path']!, savedFile['name']!);
-                                    }
-                                  : null, // ListTile is not tappable until the file is saved.
-                            );
                           },
-                        ),
+                          child: const Text("Save"),
+                        );
+                      } else {
+                        trailingWidget = Text("${(progress * 100).toStringAsFixed(0)}%");
+                      }
+
+                      return ListTile(
+                        leading: const Icon(Icons.description),
+                        title: Text(sharedFile.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text('Size: ${fileSizeToHuman(sharedFile.fileSize)}'),
+                        trailing: trailingWidget,
+                        onTap: isSaved
+                            ? () {
+                          final savedFile = _successfullySavedFilesData.firstWhere((f) => f['name'] == sharedFile.fileName);
+                          _openFile(savedFile['path']!, savedFile['name']!);
+                        }
+                            : null,
+                      );
+                    },
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
+
+              GestureDetector(
+                onTap: () async {
                   if (_discoverable) {
                     setState(() {
                       _discoverable = false;
@@ -218,17 +211,28 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                     });
                   }
                 },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  backgroundColor: _discoverable ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                ),
-                child: Text(
-                  _discoverable ? 'Stop Receiving' : 'Start Receiving',
-                  style: const TextStyle(fontSize: 16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10), //
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8), //
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Text(
+                    _discoverable ? 'Stop Receiving' : 'Start Receiving',
+                    style: const TextStyle(
+                      fontSize: 14, //
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
+
+              const SizedBox(height: 20),
             ],
           ),
         ),
