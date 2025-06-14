@@ -1,10 +1,13 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_shareit/screens/receive_screen.dart';
+
+// Mengimpor halaman dari file terpisah
 import 'package:flutter_shareit/screens/send_screen.dart';
+import 'package:flutter_shareit/screens/receive_screen.dart';
+import 'package:flutter_shareit/screens/history_screen.dart';
 import 'package:flutter_shareit/screens/settings_screen.dart';
 
-// The main screen of the application, featuring a Scaffold with responsive navigation.
+
+// Layar utama aplikasi yang mengelola semua tampilan halaman.
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -13,121 +16,150 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _lockingIndex = 0;
-  int _selectedIndex = 0; // Keeps track of the currently selected navigation item.
+  // State untuk mengelola halaman dan judul yang sedang aktif.
+  // Menggunakan widget SendScreen yang diimpor sebagai halaman awal.
+  Widget _currentPage = const SendScreen();
+  String _currentTitle = 'Kirim';
+  
+  // State untuk melacak indeks navigasi utama (Kirim/Terima).
+  int _mainNavIndex = 0;
 
-  // Define the navigation destinations for both NavigationRail and BottomNavigationBar.
-  static final List<NavigationDestination> _destinations =
-      <NavigationDestination>[
-        NavigationDestination(
-          selectedIcon: Icon(Icons.upload, color: Colors.lightBlue),
-          icon: Icon(Icons.upload_outlined, color: Colors.lightBlueAccent),
-          label: 'Send',
-        ),
-        NavigationDestination(
-          selectedIcon: Icon(Icons.download, color: Colors.orange),
-          icon: Icon(Icons.download_outlined, color: Colors.orangeAccent),
-          label: 'Receive',
-        ),
-      ];
-
-  // Function to update the selected index.
-  void _onNavigation(int index) {
+  // Fungsi untuk mengubah halaman yang ditampilkan.
+  void _selectPage(Widget page, String title, {int? navIndex}) {
     setState(() {
-      if (index < _destinations.length) {
-        _lockingIndex = index;
+      _currentPage = page;
+      _currentTitle = title;
+      // Jika navIndex disediakan, perbarui indeks navigasi utama.
+      if (navIndex != null) {
+        _mainNavIndex = navIndex;
       }
-      _selectedIndex = index;
     });
-  }
-
-  void _openSettings() {
-    setState(() {
-      _selectedIndex = _destinations.length;
-    });
-  }
-
-  void _closeSettings() {
-    setState(() {
-      _selectedIndex = _lockingIndex;
-    });
-  }
-
-  @override
-  void dispose() {
-    print("HomePage disposed");
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isWideScreen = MediaQuery.of(context).size.width > 1000.0;
-    final List<Widget> widgets = <Widget>[
-      SendScreen(),
-      ReceiveScreen(),
-      SettingsScreen(onClose: isWideScreen ? null : _closeSettings),
-    ];
-
+    
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: Text(
-          'ShareThem',
+          _currentTitle, // Judul AppBar dinamis
           style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.settings),
-            color: Theme.of(context).colorScheme.onPrimary,
-            onPressed: _openSettings,
-          ),
-        ],
-        // No leading icon needed for NavigationRail as it's always visible.
+        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
+      ),
+      // Drawer untuk navigasi ke halaman sekunder.
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              child: const Text(
+                'Menu',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Home'),
+              selected: _currentPage is SendScreen,
+              onTap: () {
+                // Menggunakan SendScreen yang diimpor.
+                _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
+                Navigator.pop(context); // Tutup drawer
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Riwayat'),
+              selected: _currentPage is HistoryScreen,
+              onTap: () {
+                // Menggunakan HistoryScreen yang diimpor.
+                _selectPage(const HistoryScreen(), 'Riwayat');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_circle),
+              title: const Text('Pengaturan Akun'),
+              selected: _currentPage is SettingsScreen,
+              onTap: () {
+                 // Menggunakan SettingsScreen yang diimpor.
+                _selectPage(const SettingsScreen(), 'Pengaturan Akun');
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
       ),
       body: Row(
         children: [
-          // Conditionally render the NavigationRail for wide screens.
+          // Render NavigationRail untuk layar lebar.
           if (isWideScreen)
-            NavigationDrawer(
-              backgroundColor: Theme.of(context).colorScheme.onPrimary,
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _onNavigation,
-              children: [
-                Padding(padding: EdgeInsets.only(top: 10)),
-                ...(_destinations.mapIndexed(
-                  (i, e) => NavigationDrawerDestination(
-                    icon: e.icon,
-                    selectedIcon: e.selectedIcon,
-                    label: Text(e.label),
-                    enabled: e.enabled,
-                  ),
-                )),
-                Padding(padding: EdgeInsets.only(bottom: 10)),
+            NavigationRail(
+              selectedIndex: _mainNavIndex,
+              onDestinationSelected: (index) {
+                if (index == 0) {
+                  _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
+                } else if (index == 1) {
+                  _selectPage(const ReceiveScreen(), 'Terima', navIndex: 1);
+                }
+              },
+              labelType: NavigationRailLabelType.all,
+              destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.upload_outlined),
+                  selectedIcon: Icon(Icons.upload),
+                  label: Text('Kirim'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.download_outlined),
+                  selectedIcon: Icon(Icons.download),
+                  label: Text('Terima'),
+                ),
               ],
             ),
 
           if (isWideScreen) const VerticalDivider(thickness: 1, width: 1),
 
-          // The main content of the screen, taking up the remaining space.
-          Expanded(child: widgets[_selectedIndex]),
+          // Konten utama yang berubah secara dinamis.
+          Expanded(child: _currentPage),
         ],
       ),
-      // Conditionally render the BottomNavigationBar for narrow screens.
-      bottomNavigationBar:
-          (isWideScreen || _selectedIndex >= _destinations.length)
-              ? null // No bottom navigation bar if it's a wide screen (using NavigationRail).
-              : NavigationBarTheme(
-                data: const NavigationBarThemeData(
-                  indicatorColor: Colors.white,
+      // Render BottomNavigationBar untuk layar sempit.
+      bottomNavigationBar: isWideScreen
+          ? null
+          : NavigationBar(
+              selectedIndex: _mainNavIndex,
+              onDestinationSelected: (index) {
+                if (index == 0) {
+                  _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
+                } else if (index == 1) {
+                  _selectPage(const ReceiveScreen(), 'Terima', navIndex: 1);
+                }
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.upload_outlined),
+                  selectedIcon: Icon(Icons.upload),
+                  label: 'Kirim',
                 ),
-                child: NavigationBar(
-                  animationDuration: const Duration(seconds: 1),
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: _onNavigation,
-                  destinations: _destinations,
+                NavigationDestination(
+                  icon: Icon(Icons.download_outlined),
+                  selectedIcon: Icon(Icons.download),
+                  label: 'Terima',
                 ),
-              ),
+              ],
+            ),
     );
   }
 }
+ 
