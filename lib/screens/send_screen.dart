@@ -12,6 +12,7 @@ import 'package:flutter_shareit/utils/file_utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../utils/sharing_discovery_service.dart';
+import 'sending_progress_bottom_sheet.dart';
 
 class SendScreen extends StatefulWidget {
   const SendScreen({super.key});
@@ -24,6 +25,8 @@ class _SendScreenState extends State<SendScreen> {
   bool _loading = false;
   final List<(SharedFile, Stream<List<int>>)> _selectedFiles = [];
   FileSharingSender? fileSharingSender;
+
+  final ValueNotifier<List<SendingProgressData>> _sendingProgressNotifier = ValueNotifier([]);
 
   Future<void> _pickFiles() async {
     try {
@@ -93,6 +96,7 @@ class _SendScreenState extends State<SendScreen> {
   void dispose() {
     SharingDiscoveryService.stopDiscovery();
     fileSharingSender?.stop();
+    _sendingProgressNotifier.dispose();
     super.dispose();
   }
 
@@ -188,10 +192,42 @@ class _SendScreenState extends State<SendScreen> {
                     onTap: () async {
                       final receiver = await showSelectReceiverDialog(context: context);
                       if (receiver is ResolvedBonsoirService) {
+                        // Inisialisasi progress untuk semua file yang akan dikirim
+                        _sendingProgressNotifier.value = _selectedFiles.map((e) =>
+                            SendingProgressData(
+                                file: e.$1,
+                                sentBytes: 0,
+                                isCompleted: false
+                            )).toList();
+
+                        // Tampilkan bottom sheet sebelum memulai pengiriman
+                        showModalBottomSheet(
+                          context: context,
+                          isDismissible: false, // Tidak bisa ditutup manual
+                          enableDrag: false,   // Tidak bisa digeser untuk ditutup
+                          builder: (context) => SendingProgressBottomSheet(
+                            progressNotifier: _sendingProgressNotifier,
+                          ),
+                        );
+
                         fileSharingSender = FileSharingSender(
                           files: _selectedFiles,
                           serverHost: receiver.host!,
                           serverPort: receiver.port,
+                          onProgressUpdate: (file, sentBytes, isCompleted) { // Callback progres
+                            final currentList = _sendingProgressNotifier.value;
+                            final index = currentList.indexWhere((data) => data.file.fileName == file.fileName);
+                            if (index != -1) {
+                              // Buat objek baru untuk memicu update ValueNotifier
+                              currentList[index] = SendingProgressData(
+                                file: file,
+                                sentBytes: sentBytes,
+                                isCompleted: isCompleted,
+                              );
+                              // Penting: Buat list baru agar ValueNotifier mendeteksi perubahan
+                              _sendingProgressNotifier.value = List.from(currentList);
+                            }
+                          },
                         );
                         await fileSharingSender?.start();
                       } else if (context.mounted) {

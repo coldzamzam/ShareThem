@@ -14,3 +14,34 @@ message SharedFile {
     uint32 file_size = 2;
     uint32 file_crc = 3;
 }
+
+message GetSharedFilesReq {
+  // Tidak ada field khusus, hanya untuk sinyal request
+}
+
+message SharedFileCompletedNotify {
+  string file_name = 1;
+  bool success = 2;
+  string message = 3; // Untuk pesan error jika gagal
+}
+
+service ShareThem {
+  rpc GetSharedFiles (GetSharedFilesReq) returns (GetSharedFilesRsp);
+  rpc SendFile (stream FileChunk) returns (stream FileSendResponse); // Jika menggunakan gRPC, ini adalah asumsi lama saya
+  rpc StreamFileToReceiver (stream SharedFileContentNotify) returns (SharedFileCompletedNotify); // Ini lebih cocok dengan socket Anda
+}
+
+// Jika Anda menggunakan gRPC, Anda mungkin juga punya pesan seperti ini:
+message FileChunk {
+  string session_id = 1;
+  string file_name = 2;
+  uint32 file_size = 3;
+  uint32 file_crc = 4;
+  bytes chunk_data = 5;
+}
+
+message FileSendResponse {
+  bool success = 1;
+  string message = 2;
+  string file_name = 3; // Tambahkan ini agar receiver bisa tahu file mana yang selesai
+}

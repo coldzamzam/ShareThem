@@ -139,100 +139,115 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                   child: _sharedFiles.isEmpty
                       ? const Center(child: Text("Ready to receive. Files will appear here."))
                       : ListView.builder(
-                    itemCount: _sharedFiles.length,
-                    itemBuilder: (_, i) {
-                      final fileTuple = _sharedFiles[i];
-                      final sharedFile = fileTuple.$1;
-                      final receivedBytes = fileTuple.$2;
-                      final progress = (sharedFile.fileSize == 0)
-                          ? 0.0
-                          : (receivedBytes / sharedFile.fileSize);
-                      final bool isSaved = _successfullySavedFilesData.any((savedFile) => savedFile['name'] == sharedFile.fileName);
-                      final bool isReadyToSave = _tempFilePaths.containsKey(sharedFile.fileName);
+                          itemCount: _sharedFiles.length,
+                          itemBuilder: (_, i) {
+                            final fileTuple = _sharedFiles[i];
+                            final sharedFile = fileTuple.$1;
+                            final receivedBytes = fileTuple.$2;
+                            final progress = (sharedFile.fileSize == 0)
+                                ? 0.0
+                                : (receivedBytes / sharedFile.fileSize);
+                            final bool isSaved = _successfullySavedFilesData.any((savedFile) => savedFile['name'] == sharedFile.fileName);
+                            final bool isReadyToSave = _tempFilePaths.containsKey(sharedFile.fileName);
 
-                      Widget trailingWidget;
-                      if (isSaved) {
-                        trailingWidget = Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text("Saved ", style: TextStyle(color: Theme.of(context).colorScheme.primary)),
-                            Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
-                          ],
-                        );
-                      } else if (isReadyToSave) {
-                        trailingWidget = ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            textStyle: const TextStyle(fontSize: 13),
-                          ),
-                          onPressed: () async {
-                            String? tempPath = _tempFilePaths[sharedFile.fileName];
-                            if (tempPath == null) return;
+                            Widget trailingWidget;
+                            if (isSaved) {
+                              trailingWidget = Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text("Saved ", style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                                  Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
+                                ],
+                              );
+                            } else if (isReadyToSave) {
+                              trailingWidget = ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  textStyle: const TextStyle(fontSize: 13),
+                                ),
+                                onPressed: () async {
+                                  String? tempPath = _tempFilePaths[sharedFile.fileName];
+                                  if (tempPath == null) return;
 
-                            final messenger = ScaffoldMessenger.of(context);
-                            String? finalPath = await _receiver.finalizeSave(tempPath, sharedFile.fileName);
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  String? finalPath = await _receiver.finalizeSave(tempPath, sharedFile.fileName);
 
-                            if (finalPath != null && finalPath.isNotEmpty) {
-                              // --- START: Save file metadata to Firestore ---
-                              final user = _auth.currentUser;
-                              if (user != null) {
-                                try {
-                                  final file = File(finalPath);
-                                  final fileStat = await file.stat();
-                                  final fileSize = fileStat.size;
+                                  if (finalPath != null && finalPath.isNotEmpty) {
+                                    // --- START: Save file metadata to Firestore ---
+                                    final user = _auth.currentUser;
+                                    if (user != null) {
+                                      try {
+                                        final file = File(finalPath);
+                                        final fileStat = await file.stat();
+                                        final fileSize = fileStat.size;
 
-                                  await _firestore
-                                      .collection('users')
-                                      .doc(user.uid)
-                                      .collection('saved_files')
-                                      .add({
-                                    'name': sharedFile.fileName,
-                                    'path': finalPath,
-                                    'size': fileSize.toString(), // Store as string as expected by HistoryScreen
-                                    'timestamp': FieldValue.serverTimestamp(), // For ordering in history
-                                    'modified': DateTime.now().toIso8601String(), // Consistent date format
-                                  });
-                                  print("File metadata saved to Firestore for ${user.uid}: ${sharedFile.fileName}");
-                                } catch (e) {
-                                  print("Error saving file metadata to Firestore: $e");
-                                  messenger.showSnackBar(SnackBar(content: Text("Error saving history for ${sharedFile.fileName}.")));
-                                }
-                              } else {
-                                messenger.showSnackBar(SnackBar(content: Text("Not logged in. File saved locally but not to history.")));
-                              }
-                              // --- END: Save file metadata to Firestore ---
+                                        await _firestore
+                                            .collection('users')
+                                            .doc(user.uid)
+                                            .collection('saved_files')
+                                            .add({
+                                              'name': sharedFile.fileName,
+                                              'path': finalPath,
+                                              'size': fileSize.toString(), // Store as string as expected by HistoryScreen
+                                              'timestamp': FieldValue.serverTimestamp(), // For ordering in history
+                                              'modified': DateTime.now().toIso8601String(), // Consistent date format
+                                            });
+                                        print("File metadata saved to Firestore for ${user.uid}: ${sharedFile.fileName}");
+                                      } catch (e) {
+                                        print("Error saving file metadata to Firestore: $e");
+                                        messenger.showSnackBar(SnackBar(content: Text("Error saving history for ${sharedFile.fileName}.")));
+                                      }
+                                    } else {
+                                      messenger.showSnackBar(SnackBar(content: Text("Not logged in. File saved locally but not to history.")));
+                                    }
+                                    // --- END: Save file metadata to Firestore ---
 
-                              messenger.showSnackBar(SnackBar(content: Text("${sharedFile.fileName} saved! Path: $finalPath")));
-                              if (!mounted) return;
-                              setState(() {
-                                if (!_successfullySavedFilesData.any((f) => f['name'] == sharedFile.fileName)) {
-                                  _successfullySavedFilesData.add({'name': sharedFile.fileName, 'path': finalPath});
-                                }
-                              });
+                                    messenger.showSnackBar(SnackBar(content: Text("${sharedFile.fileName} saved! Path: $finalPath")));
+                                    if (!mounted) return;
+                                    setState(() {
+                                      if (!_successfullySavedFilesData.any((f) => f['name'] == sharedFile.fileName)) {
+                                        _successfullySavedFilesData.add({'name': sharedFile.fileName, 'path': finalPath});
+                                      }
+                                    });
+                                  } else {
+                                    messenger.showSnackBar(SnackBar(content: Text("Failed to save ${sharedFile.fileName}.")));
+                                  }
+                                },
+                                child: const Text("Save"),
+                              );
                             } else {
-                              messenger.showSnackBar(SnackBar(content: Text("Failed to save ${sharedFile.fileName}.")));
+                              // Perubahan di sini: Menggunakan LinearProgressIndicator dan Text
+                              trailingWidget = SizedBox(
+                                width: 80, // Sesuaikan lebar progress bar sesuai kebutuhan
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    LinearProgressIndicator(
+                                      value: progress,
+                                      backgroundColor: Colors.grey[300],
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    Text("${(progress * 100).toStringAsFixed(0)}%"),
+                                  ],
+                                ),
+                              );
                             }
-                          },
-                          child: const Text("Save"),
-                        );
-                      } else {
-                        trailingWidget = Text("${(progress * 100).toStringAsFixed(0)}%");
-                      }
 
-                      return ListTile(
-                        leading: const Icon(Icons.description),
-                        title: Text(sharedFile.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text('Size: ${fileSizeToHuman(sharedFile.fileSize)}'),
-                        trailing: trailingWidget,
-                        onTap: isSaved
-                            ? () {
-                          final savedFile = _successfullySavedFilesData.firstWhere((f) => f['name'] == sharedFile.fileName);
-                          _openFile(savedFile['path']!, savedFile['name']!);
-                        }
-                            : null,
-                      );
-                    },
-                  ),
+                            return ListTile(
+                              leading: const Icon(Icons.description),
+                              title: Text(sharedFile.fileName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: Text('Size: ${fileSizeToHuman(sharedFile.fileSize)}'),
+                              trailing: trailingWidget,
+                              onTap: isSaved
+                                  ? () {
+                                        final savedFile = _successfullySavedFilesData.firstWhere((f) => f['name'] == sharedFile.fileName);
+                                        _openFile(savedFile['path']!, savedFile['name']!);
+                                      }
+                                  : null,
+                            );
+                          },
+                        ),
                 ),
               ),
               const SizedBox(height: 20),
