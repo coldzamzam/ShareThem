@@ -7,12 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
 import 'package:flutter_shareit/screens/dialogs/select_receiver_dialog.dart';
-import 'package:flutter_shareit/utils/file_sharing/file_sharing_sender.dart';
+import 'package:flutter_shareit/utils/file_sharing/file_sharing_sender.dart'; // Ini yang sudah direvisi
 import 'package:flutter_shareit/utils/file_utils.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../utils/sharing_discovery_service.dart';
-import 'sending_progress_bottom_sheet.dart';
+import 'sending_progress_bottom_sheet.dart'; // Import widget baru
 
 class SendScreen extends StatefulWidget {
   const SendScreen({super.key});
@@ -26,6 +26,7 @@ class _SendScreenState extends State<SendScreen> {
   final List<(SharedFile, Stream<List<int>>)> _selectedFiles = [];
   FileSharingSender? fileSharingSender;
 
+  // ValueNotifier untuk memperbarui UI bottom sheet
   final ValueNotifier<List<SendingProgressData>> _sendingProgressNotifier = ValueNotifier([]);
 
   Future<void> _pickFiles() async {
@@ -96,7 +97,7 @@ class _SendScreenState extends State<SendScreen> {
   void dispose() {
     SharingDiscoveryService.stopDiscovery();
     fileSharingSender?.stop();
-    _sendingProgressNotifier.dispose();
+    _sendingProgressNotifier.dispose(); // Penting: dispose notifier
     super.dispose();
   }
 
@@ -230,6 +231,7 @@ class _SendScreenState extends State<SendScreen> {
                           },
                         );
                         await fileSharingSender?.start();
+
                       } else if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
