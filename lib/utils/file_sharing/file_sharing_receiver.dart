@@ -1,23 +1,24 @@
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // For Isolate.run
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/widgets.dart'; // For ValueChanged, VoidCallback
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
-import 'package:flutter_shareit/protos/packet.pbenum.dart';
-import 'package:flutter_shareit/protos/packet.pb.dart';
-import 'package:flutter_shareit/utils/file_sharing/packet.dart';
+import 'package:flutter_shareit/protos/packet.pbenum.dart'; // EPacketType
+import 'package:flutter_shareit/protos/packet.pb.dart'; // Packet, GetSharedFilesRsp, SharedFileContentNotify
+import 'package:flutter_shareit/utils/file_sharing/packet.dart'; // Your makePacket function (ensure it also uses Endian.little)
 import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
-import 'package:flutter_shareit/utils/auth_utils.dart';
 import 'package:flutter_shareit/models/received_file_entry.dart';
 import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_shareit/firebase_options.dart';
 import 'package:flutter/services.dart'; // Import for BackgroundIsolateBinaryMessenger
 import 'dart:ui' as ui; // Import for ui.RootIsolateToken
+import 'dart:math'; // For min function in logging
+
 
 // --- TOP-LEVEL HELPER FUNCTIONS FOR ISOLATE ---
 
@@ -35,7 +36,6 @@ Future<Directory> _getDownloadDirectoryForUser(String receiverUserId) async {
 Future<String?> _performFinalizeSaveInIsolate(
   Map<String, dynamic> params,
 ) async {
-  // Retrieve the token from params
   final ui.RootIsolateToken? rootIsolateToken = params['rootIsolateToken'] as ui.RootIsolateToken?;
 
   if (rootIsolateToken == null) {
@@ -43,10 +43,8 @@ Future<String?> _performFinalizeSaveInIsolate(
     return "Error: Failed to initialize background services for file save.";
   }
 
-  // Pass the token to ensureInitialized
   BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken);
 
-  // Initialize Firebase for this isolate if it hasn't been already
   if (Firebase.apps.isEmpty) {
     try {
       await Firebase.initializeApp(
@@ -70,7 +68,7 @@ Future<String?> _performFinalizeSaveInIsolate(
 
   final File tempFile = File(tempFilePathWithPart);
   if (!await tempFile.exists()) {
-    return "Error: Temporary file '$tempFilePathWithPart' not found.";
+    return "Error: Temporary file '$tempFilePathWithPart' not found. It might have been deleted.";
   }
 
   try {
@@ -114,9 +112,9 @@ Future<String?> _performFinalizeSaveInIsolate(
     );
 
     await firestore
-      .collection('users') // <--- Collection 'users'
-      .doc(receiverUserId) // <--- Document for the user
-      .collection('savedFiles') // <--- Subcollection 'savedFiles'
+      .collection('users')
+      .doc(receiverUserId)
+      .collection('savedFiles')
       .add(receivedFileEntry.toFirestore());
 
     print(
@@ -129,37 +127,41 @@ Future<String?> _performFinalizeSaveInIsolate(
     if (Platform.isAndroid && e is FileSystemException) {
       if (e.osError?.errorCode == 13 || e.osError?.errorCode == 1) {
         errorMessage =
-          "Failed to save '$originalFileName' due to permission issues on Android.";
+          "Failed to save '$originalFileName' due to permission issues on Android. Please grant storage permissions in app settings.";
       }
     }
     return "Error: $errorMessage";
   }
 }
 
+// --- FILE SHARING RECEIVER CLASS ---
+
+typedef FileProgressCallback = void Function(List<(SharedFile, int)>);
+typedef FileReceivedToTempCallback = void Function(List<dynamic>);
+typedef TransferCompleteCallback = void Function();
+typedef ErrorCallback = void Function(String);
+
 class FileSharingReceiver {
   final int listenPort;
-  ValueChanged<List<(SharedFile, int)>>? onFileProgress;
-  ValueChanged<String>? onError;
-  ValueChanged<List<dynamic>>? onFileReceivedToTemp;
-  VoidCallback? onTransferComplete;
+
+  final FileProgressCallback? onFileProgress;
+  final ErrorCallback? onError;
+  final FileReceivedToTempCallback? onFileReceivedToTemp;
+  final TransferCompleteCallback? onTransferComplete;
 
   Map<
     String,
     ({SharedFile sharedFile, int receivedBytes, bool isCompletedAndNotified})
-  >
-  _sharedFilesStatus = {};
+  > _sharedFilesStatus = {};
+
   ServerSocket? _serverSocket;
   Socket? _currentClientSocket;
   StreamSubscription<Uint8List>? _socketSubscription;
+
   String? _temporaryStoragePath;
 
   final Map<String, IOSink> _fileSinks = {};
-  Uint8List _incomingBuffer = Uint8List(
-    0,
-  );
-
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static const String _appId = 'flutter_shareit_app';
+  Uint8List _incomingBuffer = Uint8List(0); // This buffer accumulates all incoming bytes
 
   FileSharingReceiver({
     this.listenPort = SharingDiscoveryService.servicePort,
@@ -222,7 +224,10 @@ class FileSharingReceiver {
       }
     }
     _fileSinks.clear();
-    _incomingBuffer = Uint8List(0);
+
+    _incomingBuffer = Uint8List(0); // Clear buffer on full stop
+    _sharedFilesStatus.clear(); // Clear all file statuses
+
     print(
       "FileSharingReceiver: All sinks closed and cleared. Receiver stopped.",
     );
@@ -243,7 +248,7 @@ class FileSharingReceiver {
       return;
     }
     _sharedFilesStatus.clear();
-    _incomingBuffer = Uint8List(0);
+    _incomingBuffer = Uint8List(0); // Reset buffer for new start
 
     if (_fileSinks.isNotEmpty) {
       print(
@@ -291,53 +296,87 @@ class FileSharingReceiver {
       print(
         'FileSharingReceiver: Connection received from ${socket.remoteAddress.address}:${socket.remotePort}',
       );
-      _incomingBuffer = Uint8List(0);
+      _incomingBuffer = Uint8List(0); // Clear buffer for new connection
 
       _socketSubscription = _currentClientSocket!.listen(
         (data) async {
+          // Append newly received data to the incoming buffer
           _incomingBuffer = Uint8List.fromList([..._incomingBuffer, ...data]);
+          print("FileSharingReceiver: Received ${data.length} bytes. Total buffer size: ${_incomingBuffer.length} bytes.");
 
-          var offset = 0;
+          // bytesProcessedInThisLoop tracks how many bytes we've successfully parsed
+          // from the *current* _incomingBuffer's start (index 0) in this processing cycle.
+          int bytesConsumedInThisLoop = 0; 
+
           while (true) {
-            if (offset + 4 > _incomingBuffer.lengthInBytes) {
-              break;
+            // Log current buffer state before attempting to parse
+            if (_incomingBuffer.lengthInBytes > bytesConsumedInThisLoop) {
+                print("FileSharingReceiver: Current buffer state before next packet attempt (from offset $bytesConsumedInThisLoop):");
+                final int printLength = min(30, _incomingBuffer.lengthInBytes - bytesConsumedInThisLoop);
+                final String hexBytes = _incomingBuffer.sublist(bytesConsumedInThisLoop, bytesConsumedInThisLoop + printLength)
+                                        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                                        .join(' ');
+                print("  Raw bytes (first $printLength): $hexBytes");
             }
 
-            final packetLength = ByteData.view(
-              _incomingBuffer.buffer,
-              offset,
-              4,
-            ).getUint32(0);
-            final headerAndPacketLength =
-                4 +
-                1 +
-                packetLength;
-
-            if (offset + headerAndPacketLength >
-                _incomingBuffer.lengthInBytes) {
-              break;
+            // Check if there are enough bytes for the packet length (4 bytes)
+            if (bytesConsumedInThisLoop + 4 > _incomingBuffer.lengthInBytes) {
+              print("FileSharingReceiver: Not enough bytes for length header at offset $bytesConsumedInThisLoop. Buffer size: ${_incomingBuffer.lengthInBytes}. Breaking loop (awaiting more data).");
+              break; // Not enough data for a full header, wait for more
             }
 
-            final packetTypeByte =
-                _incomingBuffer[offset + 4];
+            // Read packet length with explicit Endian.little
+            final ByteData currentPacketLengthView = ByteData.view(
+                _incomingBuffer.buffer,
+                _incomingBuffer.offsetInBytes + bytesConsumedInThisLoop, // Use the current read pointer
+                4 // Length of the header (4 bytes for packetLength)
+            );
+            final int packetLength = currentPacketLengthView.getUint32(0, Endian.little); // <--- ENSURE Endian.little HERE
+
+            // Calculate the total size of the packet (4 bytes length + 1 byte type + payloadLength)
+            final int headerAndPacketLength = 4 + 1 + packetLength;
+
+            // Validate packet length to prevent potential overflow or malicious data
+            // Max 100MB per payload is a reasonable limit for typical file sharing chunks
+            if (packetLength < 0 || packetLength > 100 * 1024 * 1024) {
+                onError?.call("Received invalid packet length: $packetLength. Data stream corrupted.");
+                print("FileSharingReceiver: Invalid packet length detected: $packetLength. Discarding remaining buffer.");
+                _incomingBuffer = Uint8List(0); // Clear buffer on severe corruption
+                return; // Stop parsing this batch of data, await next 'data' event
+            }
+
+            // Check if there are enough bytes for the entire packet (header + payload)
+            if (bytesConsumedInThisLoop + headerAndPacketLength > _incomingBuffer.lengthInBytes) {
+              print("FileSharingReceiver: Not enough bytes for full packet. Remaining: ${_incomingBuffer.lengthInBytes - bytesConsumedInThisLoop}. Expected: $headerAndPacketLength. Breaking loop (awaiting more data).");
+              break; // Not enough data for the full packet, wait for more
+            }
+
+            // Read the packet type byte
+            final packetTypeByte = _incomingBuffer[bytesConsumedInThisLoop + 4];
+            print("FileSharingReceiver: Attempting to parse packet at offset $bytesConsumedInThisLoop. Declared Payload Length: $packetLength. Declared Packet Type Byte: $packetTypeByte.");
+
             EPacketType? packetType;
             try {
               packetType = EPacketType.valueOf(packetTypeByte);
+              print("FileSharingReceiver: Successfully mapped byte $packetTypeByte to EPacketType.$packetType.");
             } catch (e) {
-              print(
-                "FileSharingReceiver: Unknown EPacketType byte: $packetTypeByte at offset $offset. Skipping this packet.",
-              );
-              offset += headerAndPacketLength;
-              continue;
+              // If the byte doesn't map to a known EPacketType, it's likely corruption or desynchronization
+              print("FileSharingReceiver: **ERROR**: Failed to map byte $packetTypeByte to EPacketType. Error: $e");
+              print("FileSharingReceiver: This usually indicates desynchronization or corrupted data. Advancing by 1 byte to try resynchronization.");
+              bytesConsumedInThisLoop += 1; // Try to resynchronize by skipping a single byte
+              continue; // Continue to the next iteration to parse from the new offset
             }
 
-            final payloadOffset = offset + 4 + 1;
-            final Uint8List payloadBytes = Uint8List.sublistView(
-              _incomingBuffer,
-              payloadOffset,
-              payloadOffset + packetLength,
+            // Extract the payload bytes (skip 4 bytes for length and 1 for type)
+            final payloadStartOffset = bytesConsumedInThisLoop + 4 + 1;
+            final Uint8List payloadBytes = _incomingBuffer.sublist(
+              payloadStartOffset,
+              payloadStartOffset + packetLength,
             );
+            
+            print('FileSharingReceiver: Processed packet of type $packetType, length $packetLength at offset $bytesConsumedInThisLoop. Payload bytes start at $payloadStartOffset.');
 
+            // Process the packet based on its type
             switch (packetType) {
               case EPacketType.GetSharedFilesRsp:
                 try {
@@ -379,14 +418,15 @@ class FileSharingReceiver {
                   print(
                     "FileSharingReceiver: Error parsing GetSharedFilesRsp: $e\n$s",
                   );
-                  onError?.call("Error processing file list: $e");
+                  onError?.call("Error processing file list from sender: $e");
                 }
                 break;
 
               case EPacketType.SharedFileContentNotify:
                 if (_temporaryStoragePath == null) {
                   onError?.call("Temporary storage path not set. File chunk skipped.");
-                  break;
+                  bytesConsumedInThisLoop += headerAndPacketLength;
+                  continue;
                 }
                 SharedFileContentNotify? fileChunk;
                 try {
@@ -397,33 +437,25 @@ class FileSharingReceiver {
 
                   var fileStatus = _sharedFilesStatus[originalFileName];
 
-                  // --- MODIFICATION HERE FOR LINGERING SINK CLEANUP ---
                   if (fileStatus != null && fileStatus.isCompletedAndNotified) {
-                    if (_fileSinks.containsKey(originalFileName)) {
-                        IOSink? existingSink = _fileSinks[originalFileName];
-                        if (existingSink != null) {
-                            print("FileSharingReceiver: Found unexpected, lingering sink for completed file: $originalFileName. Attempting final cleanup.");
-                            try {
-                                // Flush any remaining buffer, then attempt to close.
-                                // It's okay if this throws Bad state, as the primary close likely succeeded.
-                                await existingSink.flush();
-                                await existingSink.close();
-                                print("FileSharingReceiver: Lingering sink for $originalFileName successfully cleaned up.");
-                            } catch (e) {
-                                print("FileSharingReceiver: Error during lingering sink cleanup for $originalFileName: $e");
-                                // **Crucial: Even if close fails, ensure it's removed from the map.**
-                                // This is the most important part to prevent *future* interactions.
-                            } finally {
-                                _fileSinks.remove(originalFileName); // Remove regardless of close success/failure
-                            }
+                    print("FileSharingReceiver: Ignoring processing for already completed/handled file: $originalFileName. No longer expecting content. (Received ${fileContent.length} extra bytes)");
+                    final IOSink? existingSink = _fileSinks.remove(originalFileName);
+                    if (existingSink != null) {
+                        print("FileSharingReceiver: Attempting to close lingering sink for $originalFileName upon receiving extra data.");
+                        try {
+                            await existingSink.flush();
+                            await existingSink.close();
+                            print("FileSharingReceiver: Lingering sink for $originalFileName successfully closed.");
+                        } catch (e) {
+                            print("FileSharingReceiver: Error during closing lingering sink for $originalFileName: $e");
                         }
                     }
-                    print("FileSharingReceiver: Ignoring processing for already completed/handled file: $originalFileName. No longer expecting content.");
-                    break; // Stop all further processing for this chunk.
+                    bytesConsumedInThisLoop += headerAndPacketLength;
+                    continue; // Skip this chunk, process next packet
                   }
-                  // --- END MODIFICATION ---
 
                   if (fileStatus == null) {
+                    print("FileSharingReceiver: Warning: Received content for unknown file '$originalFileName'. Initializing status.");
                     _sharedFilesStatus[originalFileName] = (
                       sharedFile: sharedFileInfoFromChunk,
                       receivedBytes: 0,
@@ -442,14 +474,12 @@ class FileSharingReceiver {
                   final String tempFilePath = p.join(_temporaryStoragePath!, '$originalFileName.part');
                   IOSink sink = _fileSinks[originalFileName] ??= File(tempFilePath).openWrite(mode: FileMode.append);
                   
-                  // Add content to the sink
                   sink.add(fileContent);
 
                   onFileProgress?.call(
                     _sharedFilesStatus.values.map((s) => (s.sharedFile, s.receivedBytes)).toList()
                   );
 
-                  // This block handles the *primary* closure of the sink when the file is fully received.
                   if (currentReceivedBytes >= sharedFileInfoFromChunk.fileSize && !fileStatus.isCompletedAndNotified) {
                     print('FileSharingReceiver: File $originalFileName received completely to temp. Path: $tempFilePath');
 
@@ -459,21 +489,18 @@ class FileSharingReceiver {
                       isCompletedAndNotified: true
                     );
 
-                    final sinkToClose = _fileSinks[originalFileName];
+                    final sinkToClose = _fileSinks.remove(originalFileName);
                     if (sinkToClose != null) {
                       try {
                         await sinkToClose.flush();
-                        await sinkToClose.close(); // Primary close operation
+                        await sinkToClose.close();
                         print("FileSharingReceiver: Sink for $originalFileName successfully closed after full reception.");
                       } catch (e) {
                         print("FileSharingReceiver: Primary error closing sink for $originalFileName after completion: $e");
                         onError?.call("Failed to finalize temporary file for '$originalFileName': $e");
-                      } finally {
-                         // Always ensure it's removed immediately after trying to close.
-                         _fileSinks.remove(originalFileName); 
                       }
                     } else {
-                        print("FileSharingReceiver: Warning: Sink for $originalFileName was null after full reception. (Likely race condition)");
+                        print("FileSharingReceiver: Warning: Sink for $originalFileName was null after full reception or already removed. (Race condition or double close attempt avoided)");
                     }
                     onFileReceivedToTemp?.call([fileStatus.sharedFile, tempFilePath]);
                   }
@@ -490,7 +517,7 @@ class FileSharingReceiver {
                       );
                   }
 
-                  final sinkOnError = _fileSinks[fileNameForError];
+                  final sinkOnError = _fileSinks.remove(fileNameForError);
                   if (sinkOnError != null) {
                     try {
                       await sinkOnError.flush();
@@ -498,30 +525,28 @@ class FileSharingReceiver {
                       print("FileSharingReceiver: Sink for $fileNameForError successfully closed on error.");
                     } catch (closeError) {
                       print("FileSharingReceiver: Error closing sink for $fileNameForError in error handler: $closeError");
-                    } finally {
-                      _fileSinks.remove(fileNameForError); // Always ensure it's removed
                     }
                   }
+                  bytesConsumedInThisLoop += headerAndPacketLength;
+                  continue;
                 }
                 break;
 
-              case EPacketType.FileTransferCompleteNotify:
-                print(
-                  "FileSharingReceiver: <<< RECEIVED FILE_TRANSFER_COMPLETE_NOTIFY >>>",
-                );
+             case EPacketType.FileTransferCompleteNotify:
+                print("FileSharingReceiver: <<< RECEIVED FILE_TRANSFER_COMPLETE_NOTIFY >>>");
 
-                for (var key in _fileSinks.keys.toList()) {
+                final List<String> pendingKeys = _fileSinks.keys.toList();
+                for (var key in pendingKeys) {
                   final sink = _fileSinks[key];
-                  try {
-                    await sink?.flush();
-                    await sink?.close();
-                    print(
-                      "FileSharingReceiver: Closed remaining sink for $key.",
-                    );
-                  } catch (e) {
-                    print(
-                      "FileSharingReceiver: Error closing remaining sink for $key: $e",
-                    );
+                  if (sink != null) {
+                    try {
+                      await sink.flush();
+                      await sink.close();
+                      print("FileSharingReceiver: Closed remaining sink for $key.");
+                    } catch (e) {
+                      print("FileSharingReceiver: Error closing remaining sink for $key: $e");
+                      onError?.call("Error during final cleanup of file '$key': $e");
+                    }
                   }
                 }
                 _fileSinks.clear();
@@ -529,30 +554,36 @@ class FileSharingReceiver {
                 onTransferComplete?.call();
 
                 await _currentClientSocket?.close();
-                print(
-                  "FileSharingReceiver: Client socket closed by receiver after FileTransferCompleteNotify.",
-                );
+                print("FileSharingReceiver: Client socket closed by receiver after FileTransferCompleteNotify.");
                 await _socketSubscription?.cancel();
                 _socketSubscription = null;
                 _currentClientSocket = null;
                 break;
 
+              case EPacketType.None:
+                print(
+                  "FileSharingReceiver: Received EPacketType.None (byte: $packetTypeByte). This usually means an uninitialized packet type or an unexpected value. Ignoring.",
+                );
+                bytesConsumedInThisLoop += headerAndPacketLength;
+                continue;
+
               default:
                 print(
-                  "FileSharingReceiver: Invalid EPacketType received: $packetType (byte: $packetTypeByte)",
+                  "FileSharingReceiver: Unexpected EPacketType received: $packetType (byte: $packetTypeByte). Ignoring.",
                 );
-                break;
+                bytesConsumedInThisLoop += headerAndPacketLength;
+                continue;
             }
-            // Move offset past the processed packet
-            offset += headerAndPacketLength;
+            // Advance bytesConsumedInThisLoop for the successfully processed packet
+            bytesConsumedInThisLoop += headerAndPacketLength;
           }
 
-          // If there's remaining data after processing all complete packets,
-          // create a new _incomingBuffer with just the remaining part.
-          if (offset < _incomingBuffer.lengthInBytes) {
-            _incomingBuffer = Uint8List.sublistView(_incomingBuffer, offset);
+          // After the loop, trim the buffer to remove processed bytes
+          if (bytesConsumedInThisLoop > 0) {
+            _incomingBuffer = _incomingBuffer.sublist(bytesConsumedInThisLoop);
+            print('FileSharingReceiver: Trimmed buffer by $bytesConsumedInThisLoop bytes. New buffer size: ${_incomingBuffer.length}');
           } else {
-            _incomingBuffer = Uint8List(0); // All data processed, clear buffer
+            print('FileSharingReceiver: No full packets parsed in this iteration. Buffer size: ${_incomingBuffer.length}');
           }
         },
         onDone: () async {
@@ -566,7 +597,7 @@ class FileSharingReceiver {
 
           if (!allFilesActuallyCompleted && _sharedFilesStatus.isNotEmpty) {
             onError?.call(
-              'Connection closed unexpectedly during transfer. Not all files may have been sent.',
+              'Connection closed unexpectedly during transfer. Not all files may have been sent or finalized.',
             );
           }
 
@@ -574,10 +605,12 @@ class FileSharingReceiver {
             final sink = _fileSinks[key];
             if (sink != null) {
               try {
+                await sink.flush();
                 await sink.close();
+                print("FileSharingReceiver: Closed remaining sink for $key in onDone.");
               } catch (e) {
                 print(
-                  "FileSharingReceiver: Error closing sink for $key in onDone: $e",
+                  "FileSharingReceiver: Error closing sink for $key in onDone handler: $e",
                 );
               }
             }
@@ -601,10 +634,12 @@ class FileSharingReceiver {
             final sink = _fileSinks[key];
             if (sink != null) {
               try {
+                await sink.flush();
                 await sink.close();
+                print("FileSharingReceiver: Closed remaining sink for $key in onError.");
               } catch (e) {
                 print(
-                  "FileSharingReceiver: Error closing sink for $key in onError: $e",
+                  "FileSharingReceiver: Error closing sink for $key in onError handler: $e",
                 );
               }
             }
@@ -621,11 +656,13 @@ class FileSharingReceiver {
           "FileSharingReceiver: Sending GetSharedFilesReq to ${_currentClientSocket?.remoteAddress.address}",
         );
         final packet = makePacket(EPacketType.GetSharedFilesReq);
-        _currentClientSocket?.add(Uint8List.sublistView(packet));
+        _currentClientSocket?.add(packet.buffer.asUint8List());
         _currentClientSocket?.flush();
       } catch (e) {
         print("FileSharingReceiver: Error sending GetSharedFilesReq: $e");
         onError?.call("Failed to request file list from sender: $e");
+        _currentClientSocket?.destroy();
+        _currentClientSocket = null;
       }
     });
   }
@@ -637,7 +674,7 @@ class FileSharingReceiver {
     String senderId,
     String senderName,
     String receiverUserId,
-    ui.RootIsolateToken rootIsolateToken, // ADD THIS PARAMETER
+    ui.RootIsolateToken rootIsolateToken,
   ) async {
     final Map<String, dynamic> params = {
       'tempFilePathWithPart': tempFilePathWithPart,
@@ -646,8 +683,7 @@ class FileSharingReceiver {
       'senderId': senderId,
       'senderName': senderName,
       'receiverUserId': receiverUserId,
-      '_appId': _appId,
-      'rootIsolateToken': rootIsolateToken, // PASS THE TOKEN HERE
+      'rootIsolateToken': rootIsolateToken,
     };
 
     final result = await Isolate.run(

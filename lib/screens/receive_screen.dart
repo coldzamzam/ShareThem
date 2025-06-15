@@ -5,6 +5,7 @@ import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
+import 'dart:collection'; // Import for Queue
 
 // Your project-specific imports
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
@@ -32,6 +33,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   final AuthenticationService _authService = AuthenticationService();
   String? _currentUserId;
 
+  // Queue for files to be permanently saved (processed by a separate async task)
+  final Queue<ReceivedFileItem> _filesToSaveQueue = Queue<ReceivedFileItem>();
+  bool _isProcessingSaveQueue = false; // Flag to prevent multiple queue processors
+
   @override
   void initState() {
     super.initState();
@@ -56,12 +61,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
             ReceivedFileItem? existingItem = existingFilesMap[sharedFile.fileName];
             if (existingItem != null) {
-              // Ensure we copy from the *existing* item in the map,
-              // preserving any 'isSaving' or 'errorMessage' flags that might have been set
               newReceivedFilesList.add(existingItem.copyWith(
                 receivedBytes: receivedBytes,
-                // Do not reset isSaving or errorMessage here;
-                // _saveFilePermanently handles those for its specific item
               ));
             } else {
               newReceivedFilesList.add(ReceivedFileItem(
@@ -78,21 +79,22 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         SharedFile fileMeta = fileData[0] as SharedFile;
         String tempPath = fileData[1] as String;
 
-        // Find the item by its unique properties, not by object reference
-        final index = _receivedFiles.indexWhere((item) =>
+        final int index = _receivedFiles.indexWhere((item) =>
             item.sharedFile.fileName == fileMeta.fileName &&
             item.sharedFile.fileSize == fileMeta.fileSize);
 
         if (index != -1) {
-          // Copy from the current item in the list
-          _receivedFiles[index] = _receivedFiles[index].copyWith(
+          // Update the item as temp complete
+          ReceivedFileItem updatedItem = _receivedFiles[index].copyWith(
             tempFilePath: tempPath,
-            receivedBytes: fileMeta.fileSize.toInt(),
+            receivedBytes: fileMeta.fileSize.toInt(), // Ensure full size is reflected
+            isTempComplete: true, // Explicitly mark as temp complete
           );
+          _receivedFiles[index] = updatedItem; // Update local state
           setState(() {
-            // State updated, now UI will rebuild to show 'Save' button.
+            // UI will rebuild, showing the "Save" button for this item
           });
-          print("ReceiveScreen: File '${fileMeta.fileName}' ready to save, temp path set.");
+          print("ReceiveScreen: File '${fileMeta.fileName}' received to temp. Temp path: $tempPath. Awaiting manual save.");
         } else {
           print("ReceiveScreen: onFileReceivedToTemp: Received file meta for unknown file: ${fileMeta.fileName}");
         }
@@ -101,16 +103,17 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         if (!mounted) return;
         setState(() {
           _transferComplete = true;
-          _receivingBegun = false;
+          _receivingBegun = false; // Transfer is complete, not actively receiving data
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('All files received!'),
+            content: Text('All files transferred to temporary storage!'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 3),
           ),
         );
         SharingDiscoveryService.stopBroadcast();
+        // Saving is now manual, so we don't automatically trigger queue processing here.
       },
       onError: (message) {
         if (!mounted) return;
@@ -125,82 +128,84 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         setState(() {
           _errorMessage = message;
           _transferComplete = false;
-          // Optionally, set error state for specific file if possible, e.g.,
-          // if (message.contains("for file X")) {
-          //   final fileName = extractFileNameFromMessage(message);
-          //   final index = _receivedFiles.indexWhere((item) => item.sharedFile.fileName == fileName);
-          //   if (index != -1) {
-          //     _receivedFiles[index] = _receivedFiles[index].copyWith(
-          //       isSaving: false,
-          //       errorMessage: message,
-          //     );
-          //   }
-          // }
         });
+        // On a major error, stop any ongoing save queue processing to prevent further issues.
+        _isProcessingSaveQueue = false;
       },
     );
   }
 
-  Future<void> _saveFilePermanently(ReceivedFileItem itemToSave) async {
+  // --- Queue processing logic ---
+  void _startProcessingSaveQueue() {
+    if (_isProcessingSaveQueue) {
+      return; // Already processing
+    }
+    _isProcessingSaveQueue = true;
+    _processSaveQueue(); // Start the async processing
+  }
+
+  Future<void> _processSaveQueue() async {
+    while (_filesToSaveQueue.isNotEmpty && mounted) {
+      final itemToSave = _filesToSaveQueue.removeFirst(); // Get next item from queue
+
+      // Update UI to show 'Saving...' for this specific item BEFORE saving
+      // This is important to give immediate feedback when the button is pressed.
+      final int initialIndex = _receivedFiles.indexWhere(
+        (element) => element.sharedFile.fileName == itemToSave.sharedFile.fileName &&
+                     element.sharedFile.fileSize == itemToSave.sharedFile.fileSize,
+      );
+
+      if (initialIndex != -1) {
+        setState(() {
+          _receivedFiles[initialIndex] = _receivedFiles[initialIndex].copyWith(
+            isSaving: true,
+            errorMessage: null, // Clear previous error if retrying
+          );
+        });
+      } else {
+        print("ReceiveScreen: Warning: Item to save from queue not found in _receivedFiles list for initial state update.");
+        continue; // Skip this item if not found, move to next in queue
+      }
+
+      await _saveFilePermanentlyLogic(itemToSave); // Call the actual save logic
+    }
+    // Only set to false if the queue is truly empty and no more processing is needed
+    if (_filesToSaveQueue.isEmpty) {
+        _isProcessingSaveQueue = false;
+        print("ReceiveScreen: Save queue processing finished.");
+    }
+  }
+
+  // This is the actual save logic, now triggered by the queue
+  Future<void> _saveFilePermanentlyLogic(ReceivedFileItem itemToSave) async {
     if (_currentUserId == null) {
+      _updateReceivedFileItemState(itemToSave, isSaving: false, errorMessage: "User not logged in. Cannot save file.");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("User not logged in. Cannot save file.")),
       );
       return;
     }
     if (itemToSave.tempFilePath == null) {
+      _updateReceivedFileItemState(itemToSave, isSaving: false, errorMessage: "Temporary file path is missing.");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Temporary file path is missing.")),
       );
       return;
     }
-    if (itemToSave.isSaving) { // Check the passed item's saving state
-      print("ReceiveScreen: Already saving ${itemToSave.sharedFile.fileName}");
-      return;
-    }
-
-    // Find the item in the current list using a unique identifier
-    // This is crucial because _receivedFiles might have been rebuilt by other callbacks
-    final int initialIndex = _receivedFiles.indexWhere(
-      (element) => element.sharedFile.fileName == itemToSave.sharedFile.fileName &&
-                   element.sharedFile.fileSize == itemToSave.sharedFile.fileSize,
-    );
-
-    if (initialIndex != -1) {
-      setState(() {
-        _receivedFiles[initialIndex] = _receivedFiles[initialIndex].copyWith(
-          isSaving: true,
-          errorMessage: null,
-        );
-      });
-    } else {
-      print("ReceiveScreen: Warning: Item to save not found in _receivedFiles list for initial state update.");
-      // Potentially add a snackbar for this unexpected case if it happens often.
-      return; // Abort if we can't find the item to update its state
-    }
-
 
     final ui.RootIsolateToken? rootIsolateToken = ServicesBinding.rootIsolateToken;
 
     if (rootIsolateToken == null) {
+      _updateReceivedFileItemState(itemToSave, isSaving: false, errorMessage: "Could not obtain RootIsolateToken. Cannot save file.");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Error: Could not obtain RootIsolateToken. Cannot save file.")),
       );
-      // Ensure saving state is reset if we abort here
-      if (initialIndex != -1) {
-        setState(() {
-          _receivedFiles[initialIndex] = _receivedFiles[initialIndex].copyWith(
-            isSaving: false,
-            errorMessage: "Missing isolate token",
-          );
-        });
-      }
       return;
     }
 
     final messenger = ScaffoldMessenger.of(context);
     String? finalPathResult = await _receiver.finalizeSave(
-      itemToSave.tempFilePath!, // Use the passed item's temp path
+      itemToSave.tempFilePath!,
       itemToSave.sharedFile.fileName,
       itemToSave.sharedFile.fileSize.toInt(),
       itemToSave.sharedFile.senderId,
@@ -211,37 +216,46 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
 
     if (!mounted) return;
 
-    // Find the item again after save completes, as list might have changed
-    final int finalIndex = _receivedFiles.indexWhere(
-      (element) => element.sharedFile.fileName == itemToSave.sharedFile.fileName &&
-                   element.sharedFile.fileSize == itemToSave.sharedFile.fileSize,
-    );
-
-    setState(() {
-      if (finalIndex != -1) {
-        if (finalPathResult != null && !finalPathResult.startsWith("Error:")) {
-          _receivedFiles[finalIndex] = _receivedFiles[finalIndex].copyWith(
-            finalPath: finalPathResult,
-            isSaving: false, // <-- Set to false
-            errorMessage: null,
-          );
-          messenger.showSnackBar(
-              SnackBar(content: Text("${p.basename(finalPathResult)} saved!")));
-        } else {
-          _receivedFiles[finalIndex] = _receivedFiles[finalIndex].copyWith(
-            isSaving: false, // <-- Set to false
-            errorMessage: finalPathResult?.substring(7) ?? "Unknown save error",
-          );
-          messenger.showSnackBar(
-              SnackBar(content: Text("Failed to save ${itemToSave.sharedFile.fileName}.")),
-          );
-        }
-      } else {
-          print("ReceiveScreen: Error: Item to save not found in _receivedFiles list for final state update.");
-          // If the item somehow disappeared, the UI might be out of sync.
-      }
-    });
+    if (finalPathResult != null && !finalPathResult.startsWith("Error:")) {
+      _updateReceivedFileItemState(itemToSave, finalPath: finalPathResult, isSaving: false, errorMessage: null);
+      messenger.showSnackBar(
+          SnackBar(content: Text("${p.basename(finalPathResult)} saved successfully!")));
+    } else {
+      _updateReceivedFileItemState(itemToSave, isSaving: false, errorMessage: finalPathResult?.substring(7) ?? "Unknown save error");
+      messenger.showSnackBar(
+          SnackBar(content: Text("Failed to save ${itemToSave.sharedFile.fileName}. Please try again.")),
+      );
+    }
   }
+
+  // Helper to safely update a specific item's state in _receivedFiles
+  void _updateReceivedFileItemState(
+    ReceivedFileItem originalItem, {
+    String? finalPath,
+    bool? isSaving,
+    String? errorMessage,
+    bool? isTempComplete, // Added for clarity, though current use case relies on initial setting
+  }) {
+    if (!mounted) return;
+    final int index = _receivedFiles.indexWhere(
+      (element) => element.sharedFile.fileName == originalItem.sharedFile.fileName &&
+                   element.sharedFile.fileSize == originalItem.sharedFile.fileSize,
+    );
+    if (index != -1) {
+      setState(() {
+        _receivedFiles[index] = _receivedFiles[index].copyWith(
+          finalPath: finalPath,
+          isSaving: isSaving,
+          errorMessage: errorMessage,
+          isTempComplete: isTempComplete, // Update if provided
+        );
+      });
+    } else {
+      print("ReceiveScreen: Warning: Item to update state for not found: ${originalItem.sharedFile.fileName}");
+    }
+  }
+  // --- END Queue processing logic ---
+
 
   Future<void> _openFile(String filePath, String fileName) async {
     final result = await OpenFile.open(filePath);
@@ -264,6 +278,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   void dispose() {
     SharingDiscoveryService.stopBroadcast();
     _receiver.stop();
+    // Clear queue on dispose to prevent processing after widget is gone
+    _filesToSaveQueue.clear();
+    _isProcessingSaveQueue = false;
     super.dispose();
   }
 
@@ -282,7 +299,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     if (_errorMessage.isNotEmpty) {
       statusText = "Error: $_errorMessage";
     } else if (_transferComplete) {
-      statusText = "Transfer Complete!";
+      statusText = "Transfer Complete! Awaiting saves.";
     } else if (_receivingBegun) {
       statusText = "Receiving files...";
     } else if (_discoverable) {
@@ -334,22 +351,28 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                   Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary),
                                 ],
                               );
-                            } else if (item.isSaving) { // This is the state we are trying to manage
+                            } else if (item.isSaving) {
                               trailingWidget = const SizedBox(
                                 width: 24,
                                 height: 24,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               );
                             } else if (item.isTempComplete) {
-                              trailingWidget = ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  textStyle: const TextStyle(fontSize: 13),
-                                ),
-                                onPressed: () => _saveFilePermanently(item),
+                              // --- MODIFIED: Display Save button when temp complete ---
+                              trailingWidget = TextButton(
+                                onPressed: () {
+                                  // Add this item to the save queue
+                                  _filesToSaveQueue.add(item);
+                                  // Trigger the queue processing
+                                  _startProcessingSaveQueue();
+                                  // Optionally, update UI immediately to show "Saving..."
+                                  // This is handled by _processSaveQueue
+                                },
                                 child: const Text("Save"),
                               );
+                              // --- END MODIFIED ---
                             } else {
+                              // Display progress while receiving chunks
                               trailingWidget = Text("${(item.progress * 100).toStringAsFixed(0)}%");
                             }
 
@@ -362,7 +385,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                   overflow: TextOverflow.ellipsis,
                               ),
                               trailing: trailingWidget,
-                              onTap: item.isPermanentlySaved
+                              onTap: item.isPermanentlySaved && item.finalPath != null
                                   ? () => _openFile(item.finalPath!, p.basename(item.finalPath!))
                                   : null,
                             );
@@ -380,6 +403,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       _transferComplete = false;
                       _errorMessage = "";
                       _receivedFiles.clear();
+                      // Clear save queue on stop
+                      _filesToSaveQueue.clear();
+                      _isProcessingSaveQueue = false;
                     });
                     await SharingDiscoveryService.stopBroadcast();
                     await _receiver.stop();
@@ -389,6 +415,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       _receivingBegun = false;
                       _transferComplete = false;
                       _errorMessage = "";
+                      // Ensure queue is clear on start
+                      _filesToSaveQueue.clear();
+                      _isProcessingSaveQueue = false;
                     });
                     await _receiver.start();
                     await SharingDiscoveryService.beginBroadcast();

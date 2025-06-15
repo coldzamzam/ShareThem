@@ -45,8 +45,6 @@ class _SendScreenState extends State<SendScreen> {
   void initState() {
     super.initState();
     _loadSenderInfo(); // Fetch sender details on init
-    // No need to stop discovery here explicitly unless it's managed globally.
-    // The dialog itself should handle starting/stopping for its duration.
   }
 
   /// Fetches the current authenticated user's ID and username from Firebase/Firestore.
@@ -93,7 +91,7 @@ class _SendScreenState extends State<SendScreen> {
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
-        withReadStream: true,
+        // withReadStream: true, // We will manually read bytes, so this isn't strictly needed here.
       );
 
       if (result != null) {
@@ -109,6 +107,9 @@ class _SendScreenState extends State<SendScreen> {
             final fFile = File(file.path!);
             final crc = Crc32();
             
+            // CRC calculation is performed on the whole file, not stream for direct CRC
+            // For large files, you might want to re-evaluate CRC calculation for efficiency.
+            // For now, keeping your existing CRC calculation.
             await for (final chunk in fFile.openRead()) {
               crc.add(chunk);
             }
@@ -175,7 +176,6 @@ class _SendScreenState extends State<SendScreen> {
 
     setState(() {
       _statusMessage = "Searching for receivers...";
-      // Discovery for the dialog is handled internally by showSelectReceiverDialog
     });
     
     // Show receiver selection dialog. It should handle its own Bonsoir discovery.
@@ -188,7 +188,10 @@ class _SendScreenState extends State<SendScreen> {
         _statusMessage = "Connecting to ${receiver.name}...";
       });
 
-      final List<(SharedFile, Stream<List<int>>)> filesToTransmit = [];
+      // --- CRITICAL CHANGE HERE ---
+      // Pass the File object itself, not a Stream, to FileSharingSender.
+      // The sender will now handle the chunking using RandomAccessFile.
+      final List<(SharedFile, File)> filesToTransmit = []; 
       for (var descriptor in _selectedFileDescriptors) {
         final sharedFile = SharedFile(
           fileName: descriptor.fileName,
@@ -197,8 +200,9 @@ class _SendScreenState extends State<SendScreen> {
           senderId: _currentSenderUserId!,
           senderName: _currentSenderUsername,
         );
-        filesToTransmit.add((sharedFile, File(descriptor.filePath).openRead()));
+        filesToTransmit.add((sharedFile, File(descriptor.filePath))); // Pass the File object
       }
+      // --- END CRITICAL CHANGE ---
 
       fileSharingSender = FileSharingSender(
         filesToSend: filesToTransmit,
@@ -211,7 +215,7 @@ class _SendScreenState extends State<SendScreen> {
         await fileSharingSender?.start(); // This now awaits the full send process
         setState(() {
           _statusMessage = "Files sent successfully!";
-          _selectedFileDescriptors.clear();
+          _selectedFileDescriptors.clear(); // Clear list after successful send
         });
       } catch (e) {
         print("Error sending files: $e");
@@ -242,10 +246,8 @@ class _SendScreenState extends State<SendScreen> {
 
   @override
   void dispose() {
-    // If your dialog ensures Bonsoir is stopped after it closes, this might not be strictly necessary here.
-    // However, it's good practice to ensure no lingering discoveries.
     SharingDiscoveryService.stopDiscovery();
-    // fileSharingSender?.stop() is called internally within FileSharingSender's start method
+    // fileSharingSender?.stop() is handled internally within FileSharingSender's start method on error/completion.
     super.dispose();
   }
 
@@ -262,8 +264,8 @@ class _SendScreenState extends State<SendScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             _loading
-                ? Padding(
-                      padding: const EdgeInsets.all(10),
+                ? const Padding( // Added const here
+                      padding: EdgeInsets.all(10),
                       child: SizedBox(
                       height: 80,
                       width: 80,

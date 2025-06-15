@@ -1,32 +1,33 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math'; // Added for min function
 import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 
 import 'package:flutter_shareit/protos/packet.pb.dart';
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
-import 'package:flutter_shareit/utils/file_sharing/packet.dart';
+import 'package:flutter_shareit/utils/file_sharing/packet.dart'; // Ensure this uses the corrected makePacket function
 import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
 
 class FileSharingSender {
-  static const int chunkSize = 1_000_000;
-  final List<(SharedFile, Stream<List<int>>)> filesToSend;
+  // Define a smaller, more manageable chunk size for network packets
+  static const int customChunkSize = 512 * 1024; // 512 KB
+
+  final List<(SharedFile, File)> filesToSend; // Changed Stream<List<int>> to File
   final String serverHost;
   final int serverPort;
   Socket? _connection;
 
-  // The completer now tracks the overall success/failure of the entire transfer.
   final Completer<void> _sendCompleter = Completer<void>();
   StreamSubscription<Uint8List>? _socketSubscription;
 
   FileSharingSender({
     required this.serverHost,
-    required this.filesToSend,
+    required this.filesToSend, // Now expects a List of (SharedFile, File) tuples
     this.serverPort = SharingDiscoveryService.servicePort,
   });
 
   /// Stops the file sending process and attempts to gracefully close the connection.
-  /// If it's called due to an external cancellation, it will mark the transfer as failed.
   Future<void> stop() async {
     print("FileSharingSender: stop() called. Closing connection.");
     await _socketSubscription?.cancel();
@@ -34,17 +35,13 @@ class FileSharingSender {
 
     try {
       if (_connection != null) {
-        // Attempt to flush and close gracefully.
-        // For aggressive stop (e.g., user cancel), _connection?.destroy() might be preferred.
-        // Using close() as per your current code.
-        await _connection?.flush();
+        await _connection?.flush(); // Ensure any pending data is sent before closing
         await _connection?.close();
         _connection = null;
       }
     } catch (e) {
       print("FileSharingSender: Error closing connection: $e");
     }
-    // Only complete with an error if the transfer hasn't already finished successfully or failed.
     if (!_sendCompleter.isCompleted) {
       _sendCompleter.completeError("Sending stopped externally.");
     }
@@ -59,60 +56,66 @@ class FileSharingSender {
         throw Exception("Socket connection is null, cannot send files.");
       }
 
-      await _connection!.flush(); // Ensure any initial writes are sent
+      await _connection!.flush(); // Ensure any initial writes are sent (like GetSharedFilesRsp)
 
       for (final fileEntry in filesToSend) {
         final sharedFileMeta = fileEntry.$1;
-        final originalFileStream = fileEntry.$2;
+        final File originalFile = fileEntry.$2; // Now directly a File object
 
         print('FileSharingSender: Sending file: ${sharedFileMeta.fileName} (Size: ${sharedFileMeta.fileSize})');
 
-        final fileTransferCompleter = Completer<void>();
-        StreamSubscription<List<int>>? currentFileSubscription;
+        // --- NEW CHUNKING LOGIC ---
+        final RandomAccessFile raf = await originalFile.open(mode: FileMode.read);
+        int bytesReadTotal = 0;
+        final int fileSize = sharedFileMeta.fileSize.toInt(); // Convert Int64 to int
 
-        currentFileSubscription = originalFileStream.listen(
-          (chunk) {
-            final chunkPacket = makePacket(
-              EPacketType.SharedFileContentNotify,
-              payload: SharedFileContentNotify(
-                content: chunk,
-                file: sharedFileMeta,
-              ).writeToBuffer(),
-            );
-            _connection?.add(Uint8List.sublistView(chunkPacket));
-          },
-          onDone: () {
-            print('FileSharingSender: Stream for ${sharedFileMeta.fileName} completed.');
-            if (!fileTransferCompleter.isCompleted) {
-              fileTransferCompleter.complete();
-            }
-          },
-          onError: (e, s) {
-            print('FileSharingSender: Error in file stream for ${sharedFileMeta.fileName}: $e\n$s');
-            if (!fileTransferCompleter.isCompleted) {
-              fileTransferCompleter.completeError(e);
-            }
-          },
-          cancelOnError: true,
-        );
+        while (bytesReadTotal < fileSize) {
+          final int bytesToReadInChunk = min(customChunkSize, fileSize - bytesReadTotal);
+          final Uint8List chunkBuffer = Uint8List(bytesToReadInChunk); // Pre-allocate buffer for chunk
 
-        // Await the completion of the current file's transfer before moving to the next
-        await fileTransferCompleter.future;
-        await currentFileSubscription?.cancel(); // Use ?. for safety
+          final int actualBytesRead = await raf.readInto(chunkBuffer);
 
-        await _connection!.flush(); // Ensure all chunks of THIS file are flushed
+          if (actualBytesRead == 0) {
+            // End of file unexpectedly or corrupted file
+            print('FileSharingSender: Warning: Unexpected end of file for ${sharedFileMeta.fileName} at $bytesReadTotal bytes out of $fileSize. Breaking chunk loop.');
+            break;
+          }
+
+          final Uint8List currentChunk = chunkBuffer.sublist(0, actualBytesRead); // Get actual read bytes
+          
+          final fileContentNotify = SharedFileContentNotify(
+            content: currentChunk,
+            file: sharedFileMeta,
+          );
+          final packet = makePacket(
+            EPacketType.SharedFileContentNotify,
+            payload: fileContentNotify.writeToBuffer(),
+          );
+          
+          _connection?.add(packet.buffer.asUint8List());
+          // Flush after each chunk for better flow control and immediate network send.
+          // For very high-speed local transfers, this could be batched, but for
+          // typical wireless, flushing per chunk helps responsiveness.
+          await _connection?.flush(); 
+
+          bytesReadTotal += actualBytesRead;
+          print('FileSharingSender: Sent ${bytesReadTotal}/${fileSize} bytes for ${sharedFileMeta.fileName}.');
+
+          // Optional: Add a small delay for very fast local networks to prevent overwhelming receiver
+          // await Future.delayed(Duration(milliseconds: 1));
+        }
+        await raf.close(); // Close RandomAccessFile after reading all chunks
+        // --- END NEW CHUNKING LOGIC ---
+
         print('FileSharingSender: Finished sending file: ${sharedFileMeta.fileName}. All chunks flushed.');
       }
 
       print('FileSharingSender: All files sent. Sending FileTransferCompleteNotify.');
 
-      // 1. CREATE and SEND the completion packet
       final completionPacket = makePacket(EPacketType.FileTransferCompleteNotify);
-      _connection?.add(Uint8List.sublistView(completionPacket));
-      await _connection?.flush();
+      _connection?.add(completionPacket.buffer.asUint8List());
+      await _connection?.flush(); // Ensure completion packet is sent
 
-      // 2. Mark the sender's *sending process* as complete.
-      // The overall connection lifecycle is managed by the socket listener.
       if (!_sendCompleter.isCompleted) {
         _sendCompleter.complete(); // Transfer of all files is successfully completed.
       }
@@ -120,12 +123,10 @@ class FileSharingSender {
 
     } catch (e, s) {
       print('FileSharingSender: Error during overall file sending process: $e\n$s');
-      // If an error occurs, complete the main completer with the error.
       if (!_sendCompleter.isCompleted) {
         _sendCompleter.completeError(e);
       }
-      // In case of an error, it's safe to stop aggressively to clean up.
-      await stop();
+      await stop(); // Aggressively stop on error
     }
   }
 
@@ -138,50 +139,59 @@ class FileSharingSender {
       _connection = await Socket.connect(serverHost, serverPort);
       print("FileSharingSender: Connected to receiver.");
 
-      Uint8List? tempBuf;
+      Uint8List _incomingBuffer = Uint8List(0); // Use a local buffer for incoming data
+      
       _socketSubscription = _connection!.listen(
         (data) async {
-          print('FileSharingSender: Received ${data.length} bytes from socket listener.');
-          Uint8List currentBuffer = data;
-          if (tempBuf != null) {
-            currentBuffer = Uint8List.fromList([...tempBuf!, ...currentBuffer]);
-            tempBuf = null;
-          }
-
-          final bytes = currentBuffer.buffer.asByteData();
-          var offset = 0;
+          _incomingBuffer = Uint8List.fromList([..._incomingBuffer, ...data]);
+          print('FileSharingSender: Received ${data.length} bytes from socket listener. Total buffer size: ${_incomingBuffer.length}');
+          
+          int bytesConsumedInLoop = 0; // Tracks bytes parsed in this iteration
 
           while(true) {
-            if (offset + 4 > bytes.lengthInBytes) {
-              tempBuf = Uint8List.sublistView(currentBuffer, offset);
-              print('FileSharingSender: Not enough bytes for length header. Remaining: ${bytes.lengthInBytes - offset}. Storing in tempBuf.');
+            // Check if there are enough bytes for length header (4 bytes)
+            if (bytesConsumedInLoop + 4 > _incomingBuffer.lengthInBytes) {
+              print('FileSharingSender: Not enough bytes for length header. Remaining: ${_incomingBuffer.lengthInBytes - bytesConsumedInLoop}. Breaking loop.');
               break;
             }
 
-            final length = bytes.getUint32(offset);
-            final headerAndPacketLength = 4 + 1 + length;
+            // Read packet length with explicit Endian.little (consistent with receiver)
+            final ByteData lengthView = ByteData.view(
+              _incomingBuffer.buffer,
+              _incomingBuffer.offsetInBytes + bytesConsumedInLoop,
+              4
+            );
+            final int length = lengthView.getUint32(0, Endian.little);
 
-            if (offset + headerAndPacketLength > bytes.lengthInBytes) {
-              tempBuf = Uint8List.sublistView(currentBuffer, offset);
-              print('FileSharingSender: Not enough bytes for full packet. Remaining: ${bytes.lengthInBytes - offset}. Expected: $headerAndPacketLength. Storing in tempBuf.');
+            final int headerAndPacketLength = 4 + 1 + length;
+
+            // Basic validation for length to prevent extreme values
+            if (length < 0 || length > 10 * 1024 * 1024) { // Max 10MB payload for incoming from receiver
+                print("FileSharingSender: Invalid incoming packet length from receiver: $length. Discarding remaining buffer.");
+                _incomingBuffer = Uint8List(0); // Clear buffer on severe corruption
+                return; // Stop processing this batch of data
+            }
+
+            // Check if there are enough bytes for the full packet
+            if (bytesConsumedInLoop + headerAndPacketLength > _incomingBuffer.lengthInBytes) {
+              print('FileSharingSender: Not enough bytes for full packet. Remaining: ${_incomingBuffer.lengthInBytes - bytesConsumedInLoop}. Expected: $headerAndPacketLength. Breaking loop.');
               break;
             }
 
-            final packetTypeByte = bytes.getUint8(offset + 4);
+            final packetTypeByte = _incomingBuffer[bytesConsumedInLoop + 4];
             EPacketType? packetType;
             try {
                 packetType = EPacketType.valueOf(packetTypeByte);
             } catch (e) {
-                print("FileSharingSender: Unknown EPacketType byte: $packetTypeByte at offset $offset. Skipping this packet.");
-                offset += headerAndPacketLength;
-                if (offset >= bytes.lengthInBytes) {
-                    tempBuf = null; break;
-                }
+                print("FileSharingSender: Unknown EPacketType byte from receiver: $packetTypeByte at offset $bytesConsumedInLoop. Skipping.");
+                bytesConsumedInLoop += 1; // Try to resynchronize
                 continue;
             }
 
-            final payloadOffset = offset + 4 + 1;
-            print('FileSharingSender: Processed packet of type $packetType, length $length at offset $offset.');
+            final payloadOffset = bytesConsumedInLoop + 4 + 1;
+            final Uint8List payload = _incomingBuffer.sublist(payloadOffset, payloadOffset + length);
+
+            print('FileSharingSender: Processed incoming packet of type $packetType, length $length at offset $bytesConsumedInLoop.');
 
             switch (packetType) {
               case EPacketType.GetSharedFilesReq:
@@ -191,46 +201,44 @@ class FileSharingSender {
                   EPacketType.GetSharedFilesRsp,
                   payload: rsp.writeToBuffer(),
                 );
-                _connection?.add(Uint8List.sublistView(packet));
-                await _connection?.flush();
+                // Ensure makePacket uses Endian.little when creating the packet
+                _connection?.add(packet.buffer.asUint8List());
+                await _connection?.flush(); // Flush the response immediately
 
                 // Start the actual file sending in the background.
                 // The _sendCompleter will handle its completion/error.
                 _performSendFilesAndComplete();
                 break;
               default:
-                print("FileSharingSender: Invalid EPacketType received: $packetType (byte: $packetTypeByte)");
+                print("FileSharingSender: Invalid or unhandled EPacketType received from receiver: $packetType (byte: $packetTypeByte)");
                 break;
             }
-            offset += headerAndPacketLength;
-            if (offset >= bytes.lengthInBytes) {
-                tempBuf = null; break;
-            }
+            bytesConsumedInLoop += headerAndPacketLength; // Advance offset
+          }
+
+          // After the loop, trim the buffer to remove processed bytes
+          if (bytesConsumedInLoop > 0) {
+            _incomingBuffer = _incomingBuffer.sublist(bytesConsumedInLoop);
+            print('FileSharingSender: Trimmed incoming buffer by $bytesConsumedInLoop bytes. New buffer size: ${_incomingBuffer.length}');
+          } else {
+            print('FileSharingSender: No full packets parsed in this incoming data event. Buffer size: ${_incomingBuffer.length}');
           }
         },
         onDone: () {
-          // This `onDone` means the receiver closed the connection.
-          // If the _sendCompleter is already completed (i.e., all files were sent
-          // and _performSendFilesAndComplete() called complete()), then this is a graceful closure.
-          // Otherwise, it's an unexpected early closure from the receiver.
           print('FileSharingSender: Socket listener onDone: Connection closed by receiver.');
           if (!_sendCompleter.isCompleted) {
-            // Unexpected closure from receiver
             _sendCompleter.completeError('Receiver closed connection unexpectedly before all files were sent.');
           }
-          // Cleanup resources.
           _connection = null;
           _socketSubscription?.cancel();
           _socketSubscription = null;
         },
         onError: (error, stackTrace) {
           print('FileSharingSender: Socket listener onError: $error\n$stackTrace');
-          // Always complete with an error if the connection had an error and completer is pending.
           if (!_sendCompleter.isCompleted) {
             _sendCompleter.completeError('Socket error during send: $error');
           }
-          // Forcefully close connection and cleanup.
-          _connection?.destroy(); // Use destroy for aggressive error cleanup
+          _connection?.destroy();
           _connection = null;
           _socketSubscription?.cancel();
           _socketSubscription = null;
@@ -238,17 +246,13 @@ class FileSharingSender {
         cancelOnError: true,
       );
 
-      // Return the future from the completer immediately.
-      // This allows the caller to await the entire async operation.
       return _sendCompleter.future;
 
     } catch (e, s) {
       print("FileSharingSender: Initial connection or setup error: $e\n$s");
-      // If an error occurs during initial connection, complete the completer with error.
       if (!_sendCompleter.isCompleted) {
         _sendCompleter.completeError(e);
       }
-      // Always return the completer's future, even on initial error.
       return _sendCompleter.future;
     }
   }

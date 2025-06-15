@@ -1,21 +1,22 @@
 import 'dart:typed_data';
+import 'package:flutter_shareit/protos/packet.pbenum.dart'; // Assuming EPacketType is here
 
-import 'package:flutter_shareit/protos/packet.pb.dart';
-
+// Helper function to create a packet with length and type header
 ByteData makePacket(EPacketType type, {Uint8List? payload}) {
   final payloadLen = payload?.length ?? 0;
-  final data = ByteData(5 + payloadLen);
-  data.setUint32(0, payloadLen);
-  data.setUint8(4, type.value);
+  // Total packet size = 4 bytes (length) + 1 byte (type) + payload length
+  final data = ByteData(5 + payloadLen); 
 
+  // --- CRITICAL: Set packet length using Endian.little ---
+  data.setUint32(0, payloadLen, Endian.little); // <--- ENSURE THIS IS Endian.little
+  // --- END CRITICAL ---
+
+  data.setUint8(4, type.value); // Set packet type
+
+  // Copy payload if it exists
   if (payload != null) {
-    // Create a Uint8List view that corresponds to the ByteData object.
-    // This view respects the ByteData's own offset and length within its underlying buffer.
-    Uint8List targetView = Uint8List.sublistView(data);
-
-    // Now, targetStartOffsetInByteData is a direct offset into this targetView.
-    targetView.setRange(5, 5 + payloadLen, payload);
+    final Uint8List bufferView = data.buffer.asUint8List();
+    bufferView.setRange(5, 5 + payloadLen, payload);
   }
-
   return data;
 }
