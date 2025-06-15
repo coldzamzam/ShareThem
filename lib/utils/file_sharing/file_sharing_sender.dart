@@ -7,7 +7,6 @@ import 'package:flutter_shareit/utils/file_sharing/packet.dart';
 import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
 
 class FileSharingSender {
-  static const int chunkSize = 1_000_000;
   final List<(SharedFile, Stream<List<int>>)> files;
   final String serverHost;
   final int serverPort;
@@ -24,22 +23,19 @@ class FileSharingSender {
     _connection = null;
   }
 
-  Future<void> sendFiles() async {
-    await _connection?.flush();
+  Future<void> sendFile((SharedFile, Stream<List<int>>) file) async {
+    print("begin sending file ${file.$1.fileName}");
+    await for (final chunk in file.$2) {
+      final chunkPacket = makePacket(
+        EPacketType.SharedFileContentNotify,
+        payload: SharedFileContentNotify(
+          content: chunk,
+          file: file.$1,
+        ).writeToBuffer(),
+      );
 
-    for (final file in files) {
-      await for (final chunk in file.$2) {
-        final chunkPacket = makePacket(
-          EPacketType.SharedFileContentNotify,
-          payload: SharedFileContentNotify(
-            content: chunk,
-            file: file.$1,
-          ).writeToBuffer(),
-        );
-
-        _connection?.add(Uint8List.sublistView(chunkPacket));
-        await _connection?.flush();
-      }
+      _connection?.add(Uint8List.sublistView(chunkPacket));
+      await _connection?.flush();
     }
   }
 
@@ -47,6 +43,7 @@ class FileSharingSender {
     _connection = await Socket.connect(serverHost, serverPort);
 
     Uint8List? tempBuf;
+    int fileProgress = 0;
     _connection!.listen((data) {
       data = Uint8List.fromList([...?tempBuf, ...data]);
       tempBuf = null;
@@ -70,8 +67,13 @@ class FileSharingSender {
             payload: rsp.writeToBuffer(),
           );
           _connection?.add(Uint8List.sublistView(packet));
-
-          sendFiles();
+          
+          var file = files[fileProgress++];
+          sendFile(file);
+          break;
+        case EPacketType.SharedFileCompletedNotify:
+          var file = files[fileProgress++];
+          sendFile(file);
           break;
         default:
           print(

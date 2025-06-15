@@ -22,11 +22,13 @@ const EPacketType$json = {
     {'1': 'GetSharedFilesReq', '2': 1},
     {'1': 'GetSharedFilesRsp', '2': 2},
     {'1': 'SharedFileContentNotify', '2': 3},
+    {'1': 'SharedFileCompletedNotify', '2': 4},
   ],
 };
 
 /// Descriptor for `EPacketType`. Decode as a `google.protobuf.EnumDescriptorProto`.
 final $typed_data.Uint8List ePacketTypeDescriptor = $convert.base64Decode(
     'CgtFUGFja2V0VHlwZRIICgROb25lEAASFQoRR2V0U2hhcmVkRmlsZXNSZXEQARIVChFHZXRTaG'
-    'FyZWRGaWxlc1JzcBACEhsKF1NoYXJlZEZpbGVDb250ZW50Tm90aWZ5EAM=');
+    'FyZWRGaWxlc1JzcBACEhsKF1NoYXJlZEZpbGVDb250ZW50Tm90aWZ5EAMSHQoZU2hhcmVkRmls'
+    'ZUNvbXBsZXRlZE5vdGlmeRAE');
 

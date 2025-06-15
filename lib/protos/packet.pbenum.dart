@@ -19,15 +19,17 @@ class EPacketType extends $pb.ProtobufEnum {
   static const EPacketType GetSharedFilesReq = EPacketType._(1, _omitEnumNames ? '' : 'GetSharedFilesReq');
   static const EPacketType GetSharedFilesRsp = EPacketType._(2, _omitEnumNames ? '' : 'GetSharedFilesRsp');
   static const EPacketType SharedFileContentNotify = EPacketType._(3, _omitEnumNames ? '' : 'SharedFileContentNotify');
+  static const EPacketType SharedFileCompletedNotify = EPacketType._(4, _omitEnumNames ? '' : 'SharedFileCompletedNotify');
 
   static const $core.List<EPacketType> values = <EPacketType> [
     None,
     GetSharedFilesReq,
     GetSharedFilesRsp,
     SharedFileContentNotify,
+    SharedFileCompletedNotify,
   ];
 
-  static final $core.List<EPacketType?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static final $core.List<EPacketType?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 4);
   static EPacketType? valueOf($core.int value) =>  value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const EPacketType._(super.value, super.name);

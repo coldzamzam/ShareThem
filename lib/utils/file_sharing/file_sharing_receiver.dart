@@ -244,6 +244,9 @@ class FileSharingReceiver {
                     _fileSinks.remove(uniqueFileKey);
                     
                     onFileReceivedToTemp?.call([sharedFileFromList, tempFilePath]);
+
+                    final packet = makePacket(EPacketType.SharedFileCompletedNotify);
+                    socket.add(Uint8List.sublistView(packet));
                   }
                   
                 } catch (e, s) {
