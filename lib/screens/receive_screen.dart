@@ -1,9 +1,14 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math'; // For fileSizeToHuman utility
 import 'package:flutter/material.dart';
+import 'package:open_file/open_file.dart';
 import 'package:flutter_shareit/protos/sharethem.pb.dart';
 import 'package:flutter_shareit/utils/file_sharing/file_sharing_receiver.dart';
 import 'package:flutter_shareit/utils/sharing_discovery_service.dart';
-import 'package:open_file/open_file.dart';
-import 'package:flutter_shareit/utils/file_utils.dart';
+import 'package:flutter_shareit/utils/file_utils.dart'; 
+import 'package:firebase_auth/firebase_auth.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});
@@ -13,6 +18,10 @@ class ReceiveScreen extends StatefulWidget {
 }
 
 class _ReceiveScreenState extends State<ReceiveScreen> {
+  // Firebase instances
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   bool _discoverable = SharingDiscoveryService.isDiscoverable;
   List<(SharedFile, int)> _sharedFiles = [];
   bool _receivingBegun = false;
@@ -42,10 +51,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           _tempFilePaths[file.fileName] = tempPath;
           final index = _sharedFiles.indexWhere((f) => f.$1.fileName == file.fileName);
           if (index != -1) {
+            // Update progress if file is already in list
             if (_sharedFiles[index].$2 < file.fileSize) {
               _sharedFiles[index] = (file, file.fileSize.toInt());
             }
           } else {
+            // Add new file to list
             _sharedFiles.add((file, file.fileSize.toInt()));
           }
         });
@@ -67,6 +78,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     );
   }
 
+  /// Opens a file using the open_file package.
   Future<void> _openFile(String filePath, String fileName) async {
     final result = await OpenFile.open(filePath);
     if (result.type != ResultType.done && mounted) {
@@ -75,6 +87,14 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         backgroundColor: Colors.orange,
       ));
     }
+  }
+
+  /// Helper function to convert bytes to human-readable format.
+  String fileSizeToHuman(int bytes, {int decimals = 2}) {
+    if (bytes <= 0) return "0 B";
+    const suffixes = ["B", "KB", "MB", "GB", "TB"];
+    var i = (log(bytes) / log(1024)).floor();
+    return '${(bytes / pow(1024, i)).toStringAsFixed(decimals)} ${suffixes[i]}';
   }
 
   @override
@@ -153,6 +173,35 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                             String? finalPath = await _receiver.finalizeSave(tempPath, sharedFile.fileName);
 
                             if (finalPath != null && finalPath.isNotEmpty) {
+                              // --- START: Save file metadata to Firestore ---
+                              final user = _auth.currentUser;
+                              if (user != null) {
+                                try {
+                                  final file = File(finalPath);
+                                  final fileStat = await file.stat();
+                                  final fileSize = fileStat.size;
+
+                                  await _firestore
+                                      .collection('users')
+                                      .doc(user.uid)
+                                      .collection('saved_files')
+                                      .add({
+                                    'name': sharedFile.fileName,
+                                    'path': finalPath,
+                                    'size': fileSize.toString(), // Store as string as expected by HistoryScreen
+                                    'timestamp': FieldValue.serverTimestamp(), // For ordering in history
+                                    'modified': DateTime.now().toIso8601String(), // Consistent date format
+                                  });
+                                  print("File metadata saved to Firestore for ${user.uid}: ${sharedFile.fileName}");
+                                } catch (e) {
+                                  print("Error saving file metadata to Firestore: $e");
+                                  messenger.showSnackBar(SnackBar(content: Text("Error saving history for ${sharedFile.fileName}.")));
+                                }
+                              } else {
+                                messenger.showSnackBar(SnackBar(content: Text("Not logged in. File saved locally but not to history.")));
+                              }
+                              // --- END: Save file metadata to Firestore ---
+
                               messenger.showSnackBar(SnackBar(content: Text("${sharedFile.fileName} saved! Path: $finalPath")));
                               if (!mounted) return;
                               setState(() {
@@ -212,9 +261,9 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10), //
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8), //
+                    borderRadius: BorderRadius.circular(8),
                     gradient: const LinearGradient(
                       colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
                       begin: Alignment.topLeft,
@@ -224,7 +273,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                   child: Text(
                     _discoverable ? 'Stop Receiving' : 'Start Receiving',
                     style: const TextStyle(
-                      fontSize: 14, //
+                      fontSize: 14,
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),

@@ -1,5 +1,7 @@
+
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,9 +15,18 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    // Delay splash screen for 3 seconds, then navigate
+    // Delay splash screen for 6 seconds
     Future.delayed(const Duration(seconds: 6), () {
-      Navigator.pushReplacementNamed(context, '/login');
+      // Check if a user is currently logged in
+      User? user = FirebaseAuth.instance.currentUser;
+
+      if (user != null) {
+        // User is logged in, navigate to home page
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        // No user is logged in, navigate to login page
+        Navigator.pushReplacementNamed(context, '/login');
+      }
     });
   }
   
