@@ -7,10 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter_shareit/protos/packet.pbenum.dart';
 import 'package:flutter_shareit/utils/file_sharing/packet.dart';
-import 'package:archive/archive.dart'; // Diperlukan untuk Crc32
-import 'package:collection/collection.dart'; // Diperlukan untuk firstWhereOrNull
+import 'package:archive/archive.dart';
+import 'package:collection/collection.dart';
 
-// Definisikan tipe alias untuk tuple agar lebih mudah dibaca dan diakses
 typedef FileProcessingTuple = (IOSink sink, int receivedBytes, Crc32 crc, File tempFile);
 
 class FileSharingReceiver {
@@ -19,15 +18,17 @@ class FileSharingReceiver {
   ValueChanged<String>? onError;
   ValueChanged<List<dynamic>>? onFileReceivedToTemp;
 
-  List<(SharedFile, int)> _sharedFiles = [];
+  // _sharedFiles ini akan dikelola oleh ReceiveScreen, bukan oleh Receiver itu sendiri.
+  // Receiver hanya akan memanggil onFileProgress untuk memberi tahu ReceiveScreen tentang update.
+  // List<(SharedFile, int)> _sharedFiles = []; // Ini dihapus dari Receiver
+
   ServerSocket? _serverSocket;
   String? _temporaryStoragePath;
 
-  // Mengubah _fileSinks menjadi Map yang lebih lengkap untuk CRC dan receivedBytes
   final Map<String, FileProcessingTuple> _fileProcessingInfo = {};
-  Socket? _currentSenderSocket; // Tambahkan ini untuk melacak socket sender yang aktif
+  Socket? _currentSenderSocket;
 
-  Uint8List? _tempBuffer; // Buffer untuk paket yang tidak lengkap
+  Uint8List? _tempBuffer;
 
   FileSharingReceiver({
     this.listenPort = SharingDiscoveryService.servicePort,
@@ -63,7 +64,7 @@ class FileSharingReceiver {
     _serverSocket = null;
 
     try {
-      await _currentSenderSocket?.close(); // Tutup socket sender juga
+      await _currentSenderSocket?.close();
       print("FileSharingReceiver: Current sender socket closed.");
     } catch (e) {
       print("FileSharingReceiver: Error closing sender socket: $e");
@@ -76,21 +77,23 @@ class FileSharingReceiver {
       try {
         await info!.$1.close(); // Akses sink dengan .$1
         print("FileSharingReceiver: Closed sink for $key.");
-        if (info!.$4.existsSync()) { // Akses tempFile dengan .$4 dan cek eksistensi
-            await info.$4.delete(); // Akses tempFile
-            print("FileSharingReceiver: Deleted incomplete temp file: ${info.$4.path}"); // Akses tempFile path
+        // Hapus hanya file yang TIDAK selesai atau ada error
+        // File yang sudah sukses harusnya sudah dihapus dari _fileProcessingInfo
+        // atau sudah dipindahkan/ditandai di ReceiveScreen.
+        if (info!.$4.existsSync()) {
+            await info.$4.delete();
+            print("FileSharingReceiver: Deleted incomplete/error temp file: ${info.$4.path}");
         }
       } catch (e) {
         print("FileSharingReceiver: Error closing sink for $key: $e");
       }
     }
-    _fileProcessingInfo.clear();
-    _sharedFiles.clear(); // Bersihkan daftar file yang ditampilkan
-    _tempBuffer = null; // Bersihkan buffer
+    _fileProcessingInfo.clear(); // Bersihkan map untuk file yang masih diproses
+    // _sharedFiles.clear(); // Hapus baris ini dari Receiver! ReceiveScreen yang akan mengelolanya
+    _tempBuffer = null;
     print("FileSharingReceiver: All resources cleaned. Receiver stopped.");
   }
 
-  // Penting: Metode start() harus async karena mengandung await
   Future<void> start() async {
     print("FileSharingReceiver: start() called.");
     if (_serverSocket != null) {
@@ -103,9 +106,9 @@ class FileSharingReceiver {
       onError?.call("Temporary storage path not available. Cannot start receiver.");
       return;
     }
-    _sharedFiles.clear();
-    _fileProcessingInfo.clear(); // Pastikan ini juga dibersihkan
-    _tempBuffer = null; // Pastikan buffer kosong saat start
+    // _sharedFiles.clear(); // Hapus ini dari Receiver
+    _fileProcessingInfo.clear();
+    _tempBuffer = null;
 
     print("FileSharingReceiver: Attempting to bind server socket on port $listenPort.");
     try {
@@ -120,7 +123,7 @@ class FileSharingReceiver {
       return;
     }
 
-    _serverSocket!.listen((socket) async { // <<< Pastikan listener ini juga async
+    _serverSocket!.listen((socket) async {
       print('FileSharingReceiver: Connection received from ${socket.remoteAddress.address}:${socket.remotePort}');
       _currentSenderSocket?.destroy();
       _currentSenderSocket = socket;
@@ -187,43 +190,10 @@ class FileSharingReceiver {
                   final filesRsp = GetSharedFilesRsp.fromBuffer(payload);
                   print("FileSharingReceiver: GetSharedFilesRsp - Received with files: ${filesRsp.files.map((f) => f.fileName).toList()}");
 
-                  Map<String, int> existingProgressMap = {}; 
-                  for (var existingFileTuple in _sharedFiles) {
-                      existingProgressMap["${existingFileTuple.$1.fileName}|${existingFileTuple.$1.fileSize}"] = existingFileTuple.$2;
-                  }
+                  // Kirim daftar file ini ke ReceiveScreen melalui onFileProgress
+                  // Biarkan ReceiveScreen yang mengelola _sharedFiles-nya sendiri
+                  onFileProgress?.call(filesRsp.files.map((f) => (f, 0)).toList()); 
 
-                  List<(SharedFile, int)> newMasterList = [];
-                  bool structureChanged = false; 
-
-                  if (filesRsp.files.isEmpty && _sharedFiles.isEmpty) {
-                      print("FileSharingReceiver: GetSharedFilesRsp - Both new and old lists are empty.");
-                  } else {
-                      for (var fileMetaFromRsp in filesRsp.files) {
-                          String key = "${fileMetaFromRsp.fileName}|${fileMetaFromRsp.fileSize}";
-                          int progress = existingProgressMap[key] ?? 0; 
-                          newMasterList.add((fileMetaFromRsp, progress));
-                      }
-
-                      if (newMasterList.length != _sharedFiles.length) {
-                          structureChanged = true;
-                      } else {
-                          for (int i = 0; i < newMasterList.length; i++) {
-                              if (newMasterList[i].$1.fileName != _sharedFiles[i].$1.fileName ||
-                                  newMasterList[i].$1.fileSize != _sharedFiles[i].$1.fileSize) {
-                                  structureChanged = true;
-                                  break;
-                              }
-                          }
-                      }
-                       _sharedFiles = newMasterList; 
-                  }
-                  
-                  if (structureChanged) {
-                      print("FileSharingReceiver: GetSharedFilesRsp - _sharedFiles list structure was updated or reordered.");
-                  } else {
-                      print("FileSharingReceiver: GetSharedFilesRsp - _sharedFiles list structure and progress preserved or initialized empty.");
-                  }
-                  onFileProgress?.call(List.from(_sharedFiles));
                 } catch (e, s) {
                   print("FileSharingReceiver: Error parsing GetSharedFilesRsp: $e\n$s");
                   onError?.call("Error processing file list: $e");
@@ -255,9 +225,7 @@ class FileSharingReceiver {
                     info = (sink, 0, crc, file);
                     _fileProcessingInfo[uniqueFileKey] = info;
 
-                    if (!_sharedFiles.any((f) => f.$1.fileName == originalFileName)) {
-                        _sharedFiles.add((sharedFileInfoFromChunk, 0));
-                    }
+                    // Tidak menambahkan ke _sharedFiles di sini. ReceiveScreen akan mengelolanya saat menerima GetSharedFilesRsp.
                     print("FileSharingReceiver: Started receiving new file: $originalFileName to $tempFilePath");
                   }
                   
@@ -267,20 +235,15 @@ class FileSharingReceiver {
                   info = (info.$1, info.$2 + fileContent.length, info.$3, info.$4);
                   _fileProcessingInfo[uniqueFileKey] = info;
 
-                  final indexInSharedFiles = _sharedFiles.indexWhere((f) => f.$1.fileName == originalFileName);
-                  if (indexInSharedFiles != -1) {
-                    _sharedFiles[indexInSharedFiles] = (sharedFileInfoFromChunk, info.$2);
-                  } else {
-                    _sharedFiles.add((sharedFileInfoFromChunk, info.$2));
-                  }
-                  onFileProgress?.call(List.from(_sharedFiles));
+                  // Update progress ke ReceiveScreen
+                  onFileProgress?.call([(sharedFileInfoFromChunk, info.$2)]); // Hanya kirim update untuk file ini
 
                   if (info.$2 >= sharedFileInfoFromChunk.fileSize) {
                     print('FileSharingReceiver: File $originalFileName received completely to temp. Path: ${info.$4.path}');
                     await info.$1.flush();
                     await info.$1.close();
-                    _fileProcessingInfo.remove(uniqueFileKey);
-                    
+                    _fileProcessingInfo.remove(uniqueFileKey); // Hapus dari map pemrosesan
+
                     final calculatedCrc = info.$3.hash;
                     final isCrcMatch = calculatedCrc == sharedFileInfoFromChunk.fileCrc;
                     print("File ${sharedFileInfoFromChunk.fileName} completed. Calculated CRC: $calculatedCrc, Expected CRC: ${sharedFileInfoFromChunk.fileCrc}. Match: $isCrcMatch");
@@ -337,52 +300,49 @@ class FileSharingReceiver {
         onDone: () {
           print('FileSharingReceiver: Connection closed by client: ${_currentSenderSocket?.remoteAddress.address}:${_currentSenderSocket?.remotePort}');
           _currentSenderSocket = null;
+          // Di sini kita masih membersihkan _fileProcessingInfo untuk file yang BELUM SELESAI
           _fileProcessingInfo.forEach((key, info) async {
-            final SharedFile? originalFileMeta = _sharedFiles.firstWhereOrNull((f) => f.$1.fileName == key)?.$1;
-
-            if (originalFileMeta != null && info.$2 < originalFileMeta.fileSize) { // Akses receivedBytes
-                print("FileSharingReceiver: Incomplete file '$key' detected on connection done. Closing sink.");
-                await info.$1.close(); // Akses sink
-                try {
-                    final tempFile = info.$4; // Akses tempFile dari tuple
-                    if (await tempFile.exists()) {
-                        await tempFile.delete();
-                        print("FileSharingReceiver: Deleted incomplete file '${tempFile.path}'.");
-                    }
-                } catch (e) {
-                    print("FileSharingReceiver: Error deleting incomplete file '$key': $e");
-                }
-            } else if (originalFileMeta == null) {
-                print("FileSharingReceiver: Processing info for '$key' exists, but sharedFileMeta not found. Closing sink.");
-                await info.$1.close();
-                 try {
-                    final tempFile = info.$4; // Akses tempFile dari tuple
-                    if (await tempFile.exists()) {
-                        await tempFile.delete();
-                        print("FileSharingReceiver: Deleted temp file with no meta: '${tempFile.path}'.");
-                    }
-                } catch (e) {
-                    print("FileSharingReceiver: Error deleting temp file with no meta '$key': $e");
-                }
-            }
+             print("FileSharingReceiver: Incomplete file '$key' detected on connection done. Closing sink and deleting temp file.");
+             await info.$1.close();
+             try {
+                 final tempFile = info.$4;
+                 if (await tempFile.exists()) {
+                     await tempFile.delete();
+                     print("FileSharingReceiver: Deleted incomplete file '${tempFile.path}'.");
+                 }
+             } catch (e) {
+                 print("FileSharingReceiver: Error deleting incomplete file '$key': $e");
+             }
           });
           _fileProcessingInfo.clear();
-          _sharedFiles.clear();
-          onFileProgress?.call(List.from(_sharedFiles));
+          // _sharedFiles.clear(); // Hapus ini dari sini juga
+          // onFileProgress?.call(List.from(_sharedFiles)); // Tidak memanggil ini dengan clear
         },
         onError: (error, stackTrace) {
           print('FileSharingReceiver: Socket error: $error\n$stackTrace');
           _currentSenderSocket?.destroy();
           _currentSenderSocket = null;
           onError?.call("Network connection error: $error");
+          _fileProcessingInfo.forEach((key, info) async { // Hapus incomplete files juga pada error
+             print("FileSharingReceiver: Incomplete file '$key' detected on error. Closing sink and deleting temp file.");
+             await info.$1.close();
+             try {
+                 final tempFile = info.$4;
+                 if (await tempFile.exists()) {
+                     await tempFile.delete();
+                     print("FileSharingReceiver: Deleted incomplete file '${tempFile.path}'.");
+                 }
+             } catch (e) {
+                 print("FileSharingReceiver: Error deleting incomplete file '$key': $e");
+             }
+          });
           _fileProcessingInfo.clear();
-          _sharedFiles.clear();
-          onFileProgress?.call(List.from(_sharedFiles));
+          // _sharedFiles.clear(); // Hapus ini juga
+          // onFileProgress?.call(List.from(_sharedFiles)); // Tidak memanggil ini dengan clear
         },
         cancelOnError: true,
       );
 
-      // Ini adalah bagian di mana receiver mengirim GetSharedFilesReq
       try {
         print("FileSharingReceiver: Sending GetSharedFilesReq to ${_currentSenderSocket?.remoteAddress.address}");
         final packet = makePacket(EPacketType.GetSharedFilesReq);
@@ -466,7 +426,7 @@ class FileSharingReceiver {
       await finalFile.writeAsBytes(fileBytes);
 
       print("FileSharingReceiver: File saved successfully to: '$finalPath'");
-      await tempFile.delete();
+      await tempFile.delete(); // File sementara dihapus setelah berhasil disimpan
       print("FileSharingReceiver: Temporary file '$tempFilePathWithPart' deleted.");
       return finalPath;
 
@@ -474,7 +434,7 @@ class FileSharingReceiver {
       print("FileSharingReceiver: Error during finalizeSave: $e\n$s");
       String errorMessage = "Failed to save '$originalFileName': $e";
        if (Platform.isAndroid && e is FileSystemException) {
-         if (e.osError?.errorCode == 13 || e.osError?.errorCode == 1) { // EACCES or EPERM
+         if (e.osError?.errorCode == 13 || e.osError?.errorCode == 1) {
            errorMessage = "Failed to save '$originalFileName' due to permission issues on Android.";
          }
        }
