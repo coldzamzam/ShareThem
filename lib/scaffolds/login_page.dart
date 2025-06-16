@@ -44,7 +44,11 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _showCustomTopNotification(String message, Color backgroundColor, {Duration duration = const Duration(seconds: 3)}) {
+  void _showCustomTopNotification(
+    String message,
+    Color backgroundColor, {
+    Duration duration = const Duration(seconds: 3),
+  }) {
     _notificationTimer?.cancel();
     if (mounted) {
       setState(() {
@@ -72,13 +76,16 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final UserCredential userCredential = await _auth.signInWithCredential(
+        credential,
+      );
 
       if (userCredential.user != null) {
         final User? user = userCredential.user;
@@ -87,16 +94,24 @@ class _LoginPageState extends State<LoginPage> {
           final docSnapshot = await docRef.get();
 
           if (!docSnapshot.exists) {
-            await docRef.set(UserProfile(
-              uid: user.uid,
-              email: user.email ?? 'N/A',
-              username: user.displayName ?? 'Google User',
-              phoneNumber: null,
-              address: null,
-            ).toMap());
-            _showCustomTopNotification('New Google account created!', Colors.green);
+            await docRef.set(
+              UserProfile(
+                uid: user.uid,
+                email: user.email ?? 'N/A',
+                username: user.displayName ?? 'Google User',
+                phoneNumber: null,
+                address: null,
+              ).toMap(),
+            );
+            _showCustomTopNotification(
+              'New Google account created!',
+              Colors.green,
+            );
           } else {
-            _showCustomTopNotification('Logged in with Google successfully!', Colors.green);
+            _showCustomTopNotification(
+              'Logged in with Google successfully!',
+              Colors.green,
+            );
           }
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/home');
@@ -107,7 +122,8 @@ class _LoginPageState extends State<LoginPage> {
       String message;
       switch (e.code) {
         case 'account-exists-with-different-credential':
-          message = 'Akun sudah terdaftar dengan metode lain. Silakan gunakan metode login yang berbeda.';
+          message =
+              'Akun sudah terdaftar dengan metode lain. Silakan gunakan metode login yang berbeda.';
           break;
         case 'invalid-credential':
           message = 'Kredensial Google tidak valid.';
@@ -119,7 +135,11 @@ class _LoginPageState extends State<LoginPage> {
           message = 'Terjadi kesalahan saat login Google: ${e.message}';
           break;
       }
-      _showCustomTopNotification(message, Colors.red, duration: const Duration(seconds: 5));
+      _showCustomTopNotification(
+        message,
+        Colors.red,
+        duration: const Duration(seconds: 5),
+      );
     } catch (e) {
       _showCustomTopNotification(
         'Terjadi kesalahan tak terduga saat login Google: ${e.toString()}',
@@ -135,8 +155,14 @@ class _LoginPageState extends State<LoginPage> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final username = _usernameController.text.trim();
-    final phoneNumber = _phoneNumberController.text.trim().isEmpty ? null : _phoneNumberController.text.trim();
-    final address = _addressController.text.trim().isEmpty ? null : _addressController.text.trim();
+    final phoneNumber =
+        _phoneNumberController.text.trim().isEmpty
+            ? null
+            : _phoneNumberController.text.trim();
+    final address =
+        _addressController.text.trim().isEmpty
+            ? null
+            : _addressController.text.trim();
 
     try {
       if (_isRegisterMode) {
@@ -147,13 +173,18 @@ class _LoginPageState extends State<LoginPage> {
 
         final User? user = userCredential.user;
         if (user != null) {
-          await _firestore.collection('users').doc(user.uid).set(UserProfile(
-            uid: user.uid,
-            email: email,
-            username: username,
-            phoneNumber: phoneNumber,
-            address: address,
-          ).toMap());
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .set(
+                UserProfile(
+                  uid: user.uid,
+                  email: email,
+                  username: username,
+                  phoneNumber: phoneNumber,
+                  address: address,
+                ).toMap(),
+              );
 
           _showCustomTopNotification('Register successful!', Colors.green);
 
@@ -192,42 +223,48 @@ class _LoginPageState extends State<LoginPage> {
           if (mounted) {
             showDialog(
               context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Email not verified'),
-                content: const Text(
-                  'Please verify your email before logging in. Would you like to resend the verification email?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () async {
-                      try {
-                        final tempUserCredential = await _auth.signInWithEmailAndPassword(
-                          email: email,
-                          password: password,
-                        );
-                        await tempUserCredential.user?.sendEmailVerification();
-                        await _auth.signOut();
-                        if (mounted) Navigator.pop(context);
-                        _showCustomTopNotification('Verification email resent.', Colors.orange);
-                      } on FirebaseAuthException catch (e) {
-                        if (mounted) Navigator.pop(context);
-                        _showCustomTopNotification(
-                          'Failed to resend verification email: ${e.message}',
-                          Colors.red,
-                          duration: const Duration(seconds: 5),
-                        );
-                      }
-                    },
-                    child: const Text('Resend'),
+              builder:
+                  (context) => AlertDialog(
+                    title: const Text('Email not verified'),
+                    content: const Text(
+                      'Please verify your email before logging in. Would you like to resend the verification email?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () async {
+                          try {
+                            final tempUserCredential = await _auth
+                                .signInWithEmailAndPassword(
+                                  email: email,
+                                  password: password,
+                                );
+                            await tempUserCredential.user
+                                ?.sendEmailVerification();
+                            await _auth.signOut();
+                            if (mounted) Navigator.pop(context);
+                            _showCustomTopNotification(
+                              'Verification email resent.',
+                              Colors.orange,
+                            );
+                          } on FirebaseAuthException catch (e) {
+                            if (mounted) Navigator.pop(context);
+                            _showCustomTopNotification(
+                              'Failed to resend verification email: ${e.message}',
+                              Colors.red,
+                              duration: const Duration(seconds: 5),
+                            );
+                          }
+                        },
+                        child: const Text('Resend'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          if (mounted) Navigator.pop(context);
+                        },
+                        child: const Text('Cancel'),
+                      ),
+                    ],
                   ),
-                  TextButton(
-                    onPressed: () {
-                      if (mounted) Navigator.pop(context);
-                    },
-                    child: const Text('Cancel'),
-                  ),
-                ],
-              ),
             );
           }
         }
@@ -257,7 +294,11 @@ class _LoginPageState extends State<LoginPage> {
           message = 'Terjadi kesalahan: ${e.message}';
           break;
       }
-      _showCustomTopNotification(message, Colors.red, duration: const Duration(seconds: 5));
+      _showCustomTopNotification(
+        message,
+        Colors.red,
+        duration: const Duration(seconds: 5),
+      );
     } catch (e) {
       _showCustomTopNotification(
         'An unexpected error occurred: ${e.toString()}',
@@ -267,16 +308,16 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // =======================================================================
-  // KODE YANG DIPERBAIKI ADA DI DALAM METHOD build() DI BAWAH INI
-  // =======================================================================
   @override
   Widget build(BuildContext context) {
+    // Mengambil tinggi layar untuk memastikan konten bisa mengisi layar
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset: true, // Pastikan ini true
       body: Stack(
         children: [
-          // Background gradient
+          // Background gradient (tetap sama)
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -287,65 +328,82 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
 
-          // Main content column
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: Column(
-              children: [
-                // Spacer pertama untuk mendorong konten ke tengah dari atas
-                const Spacer(),
-
-                const Text(
-                  'Sign in to ShareThem',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
+          // Main content dibuat scrollable
+          SafeArea(
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  // Konten minimal setinggi layar agar bisa center secara vertikal
+                  minHeight: screenHeight - MediaQuery.of(context).padding.top,
                 ),
-                const SizedBox(height: 30), // Jarak antara judul dan card
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Column(
+                    // Menggunakan MainAxisAlignment untuk centering (pengganti Spacer)
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Memberi sedikit ruang di atas
+                      const SizedBox(height: 40),
 
-                // Konten utama (card)
-                SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 500),
-                    child: Card(
-                      margin: const EdgeInsets.all(0),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: _showEmailLoginForm
-                              ? _buildEmailForm(context)
-                              : _buildInitialButtons(context),
+                      const Text(
+                        'Sign in to ShareThem',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 30),
+
+                      // Konten utama (card)
+                      // SingleChildScrollView di sini sudah tidak diperlukan
+                      // karena parent-nya sudah scrollable.
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 500),
+                        child: Card(
+                          margin: const EdgeInsets.all(0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child:
+                                  _showEmailLoginForm
+                                      ? _buildEmailForm(context)
+                                      : _buildInitialButtons(context),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Memberi sedikit ruang di bawah sebelum footer
+                      const SizedBox(height: 40),
+
+                      // Footer
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Text(
+                          '© ShareThem Copyright Kelompok 2 PBL 2025',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-
-                // Spacer kedua untuk mendorong footer ke bawah
-                const Spacer(),
-
-                // Footer
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  child: Text(
-                    '© ShareThem Copyright Kelompok 2 PBL 2025',
-                    style: TextStyle(color: Colors.white.withOpacity(0.8)),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
 
-          // Custom Top Notification Layer
-          if (_showNotification && _notificationMessage != null && _notificationColor != null)
+          // Custom Top Notification Layer (tetap sama)
+          if (_showNotification &&
+              _notificationMessage != null &&
+              _notificationColor != null)
             Positioned(
               top: MediaQuery.of(context).padding.top + 20.0,
               left: 20.0,
@@ -355,7 +413,10 @@ class _LoginPageState extends State<LoginPage> {
                 elevation: 6.0,
                 borderRadius: BorderRadius.circular(10),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 12.0,
+                  ),
                   child: Text(
                     _notificationMessage!,
                     style: const TextStyle(color: Colors.white),
@@ -390,8 +451,9 @@ class _LoginPageState extends State<LoginPage> {
             icon: Image.network(
               'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
               height: 20,
-              errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.g_mobiledata),
+              errorBuilder:
+                  (context, error, stackTrace) =>
+                      const Icon(Icons.g_mobiledata),
             ),
             label: const Text('Google'),
             style: ElevatedButton.styleFrom(
@@ -425,21 +487,6 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/'),
-            icon: const Icon(Icons.home),
-            label: const Text('Back to home'),
-            style: ElevatedButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.onSurface,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -605,8 +652,10 @@ class _LoginPageState extends State<LoginPage> {
                 });
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-                foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                backgroundColor:
+                    Theme.of(context).colorScheme.secondaryContainer,
+                foregroundColor:
+                    Theme.of(context).colorScheme.onSecondaryContainer,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -623,33 +672,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
-// Jangan lupa untuk membuat file user.dart di dalam folder models
-// contoh isi file models/user.dart:
-/*
-class UserProfile {
-  final String uid;
-  final String email;
-  final String username;
-  final String? phoneNumber;
-  final String? address;
-
-  UserProfile({
-    required this.uid,
-    required this.email,
-    required this.username,
-    this.phoneNumber,
-    this.address,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'uid': uid,
-      'email': email,
-      'username': username,
-      'phoneNumber': phoneNumber,
-      'address': address,
-    };
-  }
-}
-*/
