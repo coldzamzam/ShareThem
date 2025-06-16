@@ -13,22 +13,22 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // =======================================================================
-  // BAGIAN LOGIKA (TIDAK ADA YANG DIUBAH)
-  // Semua state, controller, dan fungsi Anda tetap sama.
-  // =======================================================================
   bool _showEmailLoginForm = false;
   bool _isRegisterMode = false;
+
+  // State variables for the custom top notification
   String? _notificationMessage;
   Color? _notificationColor;
   bool _showNotification = false;
   Timer? _notificationTimer;
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _usernameController = TextEditingController();
   final _phoneNumberController = TextEditingController();
   final _addressController = TextEditingController();
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -65,7 +65,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _signInWithGoogle() async {
-    // Fungsi ini tidak diubah
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -131,7 +130,6 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleSubmit() async {
-    // Fungsi ini tidak diubah
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final email = _emailController.text.trim();
@@ -270,45 +268,55 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // =======================================================================
-  // BAGIAN UI (SEMUA DI BAWAH INI TELAH DIPERBARUI SESUAI DESAIN)
+  // KODE YANG DIPERBAIKI ADA DI DALAM METHOD build() DI BAWAH INI
   // =======================================================================
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
     return Scaffold(
-      backgroundColor: Colors.white,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          _buildCurvedBackground(context, screenHeight),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  SizedBox(height: screenHeight * 0.1),
-                  const Text(
-                    'Sign in to ShareThem',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 27,
-                      fontWeight: FontWeight.bold,
-                      shadows: [Shadow(blurRadius: 10.0, color: Colors.black26)],
-                    ),
+          // Background gradient
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+              ),
+            ),
+          ),
+
+          // Main content column
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: Column(
+              children: [
+                // Spacer pertama untuk mendorong konten ke tengah dari atas
+                const Spacer(),
+
+                const Text(
+                  'Sign in to ShareThem',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 40),
-                  Card(
-                    elevation: 8.0,
-                    shadowColor: Colors.black38,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: AnimatedSize(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
+                ),
+                const SizedBox(height: 30), // Jarak antara judul dan card
+
+                // Konten utama (card)
+                SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: Card(
+                      margin: const EdgeInsets.all(0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 200),
                           child: _showEmailLoginForm
@@ -318,19 +326,25 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                   ),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: Text(
-                      '© ShareThem 2025.\nAll rights reserved.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
+                ),
+
+                // Spacer kedua untuk mendorong footer ke bawah
+                const Spacer(),
+
+                // Footer
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    '© ShareThem Copyright Kelompok 2 PBL 2025',
+                    style: TextStyle(color: Colors.white.withOpacity(0.8)),
+                    textAlign: TextAlign.center,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
+
+          // Custom Top Notification Layer
           if (_showNotification && _notificationMessage != null && _notificationColor != null)
             Positioned(
               top: MediaQuery.of(context).padding.top + 20.0,
@@ -344,7 +358,7 @@ class _LoginPageState extends State<LoginPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                   child: Text(
                     _notificationMessage!,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    style: const TextStyle(color: Colors.white),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -355,92 +369,76 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildCurvedBackground(BuildContext context, double screenHeight) {
-    return ClipPath(
-      clipper: _LoginShapeClipper(),
-      child: Container(
-        height: screenHeight * 0.4,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFBCA4EC), Color(0xFF8C82E3)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGradientButton({required VoidCallback onPressed, required String label, Widget? icon}) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFAD78D9), Color(0xFF8667E3)],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
-          )
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (icon != null) ...[icon, const SizedBox(width: 10)],
-                Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildInitialButtons(BuildContext context) {
     return Column(
       key: const ValueKey<int>(0),
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
+        Text(
           'Sign In',
-          style: TextStyle(color: Color(0xFF333333), fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 24),
-        _buildGradientButton(
-          onPressed: _signInWithGoogle,
-          label: 'Google',
-          icon: Image.network(
-            'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
-            height: 20,
-            width: 20,
-            errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata, color: Colors.white, size: 20),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
           ),
         ),
-
-        const SizedBox(height: 12),
-        _buildGradientButton(
-          onPressed: () => setState(() => _showEmailLoginForm = true),
-          label: 'Email',
-          icon: const Icon(Icons.email, color: Colors.white, size: 20),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _signInWithGoogle,
+            icon: Image.network(
+              'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
+              height: 20,
+              errorBuilder: (context, error, stackTrace) =>
+              const Icon(Icons.g_mobiledata),
+            ),
+            label: const Text('Google'),
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
         ),
-        const SizedBox(height: 12),
-        _buildGradientButton(
-          onPressed: () => Navigator.pushReplacementNamed(context, '/'),
-          label: 'Back to home',
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                _showEmailLoginForm = true;
+                _isRegisterMode = false;
+              });
+            },
+            icon: const Icon(Icons.email),
+            label: const Text('Email'),
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+            icon: const Icon(Icons.home),
+            label: const Text('Back to home'),
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -455,59 +453,203 @@ class _LoginPageState extends State<LoginPage> {
         children: [
           Text(
             _isRegisterMode ? 'Register with Email' : 'Login with Email',
-            style: const TextStyle(color: Color(0xFF333333), fontSize: 22, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 20),
-          TextFormField(controller: _emailController, decoration: _inputDecoration('Email', Icons.email_outlined), validator: (v) => v!.isEmpty ? 'Email tidak boleh kosong' : null),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              labelText: 'Email',
+              hintText: 'Enter your email',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              prefixIcon: const Icon(Icons.person),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your email';
+              }
+              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                return 'Please enter a valid email address';
+              }
+              return null;
+            },
+          ),
           if (_isRegisterMode) ...[
             const SizedBox(height: 12),
-            TextFormField(controller: _usernameController, decoration: _inputDecoration('Username', Icons.person_outline), validator: (v) => v!.isEmpty ? 'Username tidak boleh kosong' : null),
+            TextFormField(
+              controller: _usernameController,
+              decoration: InputDecoration(
+                labelText: 'Username',
+                hintText: 'Enter your username',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                prefixIcon: const Icon(Icons.person_outline),
+              ),
+              validator: (value) {
+                if (_isRegisterMode && (value == null || value.isEmpty)) {
+                  return 'Please enter a username';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 12),
-            TextFormField(controller: _phoneNumberController, decoration: _inputDecoration('Phone Number (Optional)', Icons.phone)),
+            TextFormField(
+              controller: _phoneNumberController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Phone Number (Optional)',
+                hintText: 'e.g., 081234567890',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                prefixIcon: const Icon(Icons.phone),
+              ),
+            ),
             const SizedBox(height: 12),
-            TextFormField(controller: _addressController, decoration: _inputDecoration('Address (Optional)', Icons.location_on)),
+            TextFormField(
+              controller: _addressController,
+              keyboardType: TextInputType.streetAddress,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Address (Optional)',
+                hintText: 'Your full address',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                prefixIcon: const Icon(Icons.location_on),
+              ),
+            ),
           ],
           const SizedBox(height: 12),
-          TextFormField(controller: _passwordController, obscureText: true, decoration: _inputDecoration('Password', Icons.lock_outline), validator: (v) => v!.length < 6 ? 'Password minimal 6 karakter' : null),
-          const SizedBox(height: 20),
-          _buildGradientButton(onPressed: _handleSubmit, label: _isRegisterMode ? 'Register' : 'Login'),
-          TextButton(
-            onPressed: () => setState(() => _isRegisterMode = !_isRegisterMode),
-            child: Text(_isRegisterMode ? 'Already have an account? Login' : 'Don\'t have an account? Register'),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: InputDecoration(
+              labelText: 'Password',
+              hintText: 'Enter your password',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              prefixIcon: const Icon(Icons.lock),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your password';
+              }
+              if (value.length < 8) {
+                return 'Password should be at least 8 characters';
+              }
+              return null;
+            },
           ),
-          TextButton.icon(
-            icon: const Icon(Icons.arrow_back, size: 16),
-            label: const Text('Back to options'),
-            onPressed: () => setState(() => _showEmailLoginForm = false),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _handleSubmit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(
+                _isRegisterMode ? 'Register' : 'Login',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _isRegisterMode = !_isRegisterMode;
+                _formKey.currentState?.reset();
+                _emailController.clear();
+                _passwordController.clear();
+                _usernameController.clear();
+                _phoneNumberController.clear();
+                _addressController.clear();
+              });
+            },
+            child: Text(
+              _isRegisterMode
+                  ? 'Already have an account? Login'
+                  : 'Don\'t have an account? Register',
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _showEmailLoginForm = false;
+                  _isRegisterMode = false;
+                  _formKey.currentState?.reset();
+                  _emailController.clear();
+                  _passwordController.clear();
+                  _usernameController.clear();
+                  _phoneNumberController.clear();
+                  _addressController.clear();
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+                foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Back',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-
-  InputDecoration _inputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, color: Colors.grey[600]),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF8C82E3), width: 2)),
-      filled: true,
-      fillColor: Colors.grey[50],
-    );
-  }
 }
 
-class _LoginShapeClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.lineTo(0, size.height - 50);
-    path.quadraticBezierTo(size.width / 2, size.height, size.width, size.height - 50);
-    path.lineTo(size.width, 0);
-    path.close();
-    return path;
-  }
+// Jangan lupa untuk membuat file user.dart di dalam folder models
+// contoh isi file models/user.dart:
+/*
+class UserProfile {
+  final String uid;
+  final String email;
+  final String username;
+  final String? phoneNumber;
+  final String? address;
 
-  @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+  UserProfile({
+    required this.uid,
+    required this.email,
+    required this.username,
+    this.phoneNumber,
+    this.address,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'uid': uid,
+      'email': email,
+      'username': username,
+      'phoneNumber': phoneNumber,
+      'address': address,
+    };
+  }
 }
+*/
