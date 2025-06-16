@@ -6,7 +6,6 @@ import 'package:flutter_shareit/screens/receive_screen.dart';
 import 'package:flutter_shareit/screens/history_screen.dart';
 import 'package:flutter_shareit/screens/settings_screen.dart';
 
-
 // Layar utama aplikasi yang mengelola semua tampilan halaman.
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,7 +19,7 @@ class _HomePageState extends State<HomePage> {
   // Menggunakan widget SendScreen yang diimpor sebagai halaman awal.
   Widget _currentPage = const SendScreen();
   String _currentTitle = 'Kirim';
-  
+
   // State untuk melacak indeks navigasi utama (Kirim/Terima).
   int _mainNavIndex = 0;
 
@@ -39,15 +38,30 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final bool isWideScreen = MediaQuery.of(context).size.width > 1000.0;
-    
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        // Hapus backgroundColor agar tidak menutupi gradient di flexibleSpace
+        // backgroundColor: Theme.of(context).colorScheme.primary,
         title: Text(
           _currentTitle, // Judul AppBar dinamis
           style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
         ),
-        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onPrimary),
+        iconTheme: IconThemeData(
+          color: Theme.of(context).colorScheme.onPrimary,
+        ),
+
+        // Gunakan flexibleSpace untuk menempatkan widget di belakang AppBar
+        flexibleSpace: Container(
+          // Di sini kita tempatkan dekorasi gradient Anda
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+            ),
+          ),
+        ),
       ),
       // Drawer untuk navigasi ke halaman sekunder.
       drawer: Drawer(
@@ -56,14 +70,15 @@ class _HomePageState extends State<HomePage> {
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
+                gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+                  colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                ),
               ),
               child: const Text(
                 'Menu',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
             ListTile(
@@ -92,7 +107,7 @@ class _HomePageState extends State<HomePage> {
               title: const Text('Pengaturan Akun'),
               selected: _currentPage is SettingsScreen,
               onTap: () {
-                 // Menggunakan SettingsScreen yang diimpor.
+                // Menggunakan SettingsScreen yang diimpor.
                 _selectPage(const SettingsScreen(), 'Pengaturan Akun');
                 Navigator.pop(context);
               },
@@ -135,31 +150,31 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       // Render BottomNavigationBar untuk layar sempit.
-      bottomNavigationBar: isWideScreen
-          ? null
-          : NavigationBar(
-              selectedIndex: _mainNavIndex,
-              onDestinationSelected: (index) {
-                if (index == 0) {
-                  _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
-                } else if (index == 1) {
-                  _selectPage(const ReceiveScreen(), 'Terima', navIndex: 1);
-                }
-              },
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.upload_outlined),
-                  selectedIcon: Icon(Icons.upload),
-                  label: 'Kirim',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.download_outlined),
-                  selectedIcon: Icon(Icons.download),
-                  label: 'Terima',
-                ),
-              ],
-            ),
+      bottomNavigationBar:
+          isWideScreen
+              ? null
+              : NavigationBar(
+                selectedIndex: _mainNavIndex,
+                onDestinationSelected: (index) {
+                  if (index == 0) {
+                    _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
+                  } else if (index == 1) {
+                    _selectPage(const ReceiveScreen(), 'Terima', navIndex: 1);
+                  }
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.upload_outlined),
+                    selectedIcon: Icon(Icons.upload),
+                    label: 'Kirim',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.download_outlined),
+                    selectedIcon: Icon(Icons.download),
+                    label: 'Terima',
+                  ),
+                ],
+              ),
     );
   }
 }
- 
