@@ -118,31 +118,31 @@ class _HomePageState extends State<HomePage> {
               Divider(height: 1, thickness: 1, color: Colors.grey[300]), // Divider yang lebih halus
               ListTile(
                 leading: Icon(Icons.history, color: _currentPage is HistoryScreen ? primaryDark : Colors.grey[700]),
-                title: Text('Riwayat', style: TextStyle(color: _currentPage is HistoryScreen ? primaryDark : Colors.grey[800])),
+                title: Text('History', style: TextStyle(color: _currentPage is HistoryScreen ? primaryDark : Colors.grey[800])),
                 selected: _currentPage is HistoryScreen,
                 selectedTileColor: primaryLight.withOpacity(0.1),
                 onTap: () {
-                  _selectPage(const HistoryScreen(), 'Riwayat');
+                  _selectPage(const HistoryScreen(), 'History');
                   Navigator.pop(context);
                 },
               ),
               ListTile(
                 leading: Icon(Icons.account_circle_outlined, color: _currentPage is SettingsScreen ? primaryDark : Colors.grey[700]),
-                title: Text('Pengaturan Akun', style: TextStyle(color: _currentPage is SettingsScreen ? primaryDark : Colors.grey[800])),
+                title: Text('Account Settings', style: TextStyle(color: _currentPage is SettingsScreen ? primaryDark : Colors.grey[800])),
                 selected: _currentPage is SettingsScreen,
                 selectedTileColor: primaryLight.withOpacity(0.1),
                 onTap: () {
-                  _selectPage(const SettingsScreen(), 'Pengaturan Akun');
+                  _selectPage(const SettingsScreen(), 'Account Settings');
                   Navigator.pop(context);
                 },
               ),
               ListTile(
                 leading: Icon(Icons.info_outline_rounded, color: _currentPage is AboutScreen ? primaryDark : Colors.grey[700]),
-                title: Text('Tentang Aplikasi', style: TextStyle(color: _currentPage is AboutScreen ? primaryDark : Colors.grey[800])),
+                title: Text('About Us', style: TextStyle(color: _currentPage is AboutScreen ? primaryDark : Colors.grey[800])),
                 selected: _currentPage is AboutScreen,
                 selectedTileColor: primaryLight.withOpacity(0.1),
                 onTap: () {
-                  _selectPage(const AboutScreen(), 'Tentang Aplikasi');
+                  _selectPage(const AboutScreen(), 'About Us');
                   Navigator.pop(context);
                 },
               ),
