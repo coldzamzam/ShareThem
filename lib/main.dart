@@ -4,7 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_shareit/firebase_options.dart';
 import 'package:flutter_shareit/scaffolds/home_page.dart';
 import 'package:flutter_shareit/scaffolds/login_page.dart';
-import 'package:flutter_shareit/screens/splash_screen.dart'; // Ensure this path is correct
+import 'package:flutter_shareit/screens/splash_screen.dart'; 
+import 'package:flutter_shareit/scaffolds/onboarding_page.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
 
 void main() async {
@@ -37,6 +38,7 @@ class MyApp extends StatelessWidget {
         '/': (_) => const SplashScreen(),
         '/login': (_) => const LoginPage(),
         '/home': (_) => const HomePage(),
+        '/onboarding': (context) => const OnboardingScreen(),
       },
     );
   }

@@ -57,6 +57,7 @@ dependencies:
   permission_handler: ^12.0.0+1
   file_saver: ^0.2.14
   open_file: ^3.5.10
+  shared_preferences: ^2.5.3
   
 dev_dependencies:
   flutter_test:
@@ -84,6 +85,7 @@ flutter:
   assets:
     - assets/animations/splash_screen.json
     - assets/avatars/
+    - assets/images/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
