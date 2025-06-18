@@ -182,7 +182,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 autofocus: true,
                 decoration: const InputDecoration( // Made const as hintStyle is const
                   hintText: 'Search file name...',
-                  border: InputBorder.none,
+                  border: UnderlineInputBorder(),
+                  // Changed border color to match the app theme
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.black54), // Changed focused border color to black
+                  ),
                   hintStyle: TextStyle(color: Colors.black54), // Changed hint text color to black54
                 ),
                 style: const TextStyle(color: Colors.black, fontSize: 18.0), // Changed input text color to black

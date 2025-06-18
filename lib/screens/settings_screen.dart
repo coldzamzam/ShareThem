@@ -425,24 +425,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Column(
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 15, 16, 15),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Settings",
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                    ),
-                    if (widget.onClose != null)
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 30),
-                        onPressed: widget.onClose,
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
+              // Padding(
+              //   padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 15, 16, 15),
+              //   child: Row(
+              //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              //     children: [
+              //       const Text(
+              //         "Settings",
+              //         style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              //       ),
+              //       if (widget.onClose != null)
+              //         IconButton(
+              //           icon: const Icon(Icons.close, size: 30),
+              //           onPressed: widget.onClose,
+              //         ),
+              //     ],
+              //   ),
+              // ),
+              // const SizedBox(height: 10),
 
               Expanded(
                 child: SingleChildScrollView(
@@ -450,6 +450,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      const SizedBox(height: 20),
                       _buildProfilePictureSection(),
                       const SizedBox(height: 10),
                       _currentUser != null

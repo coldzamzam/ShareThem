@@ -5,6 +5,7 @@ import 'package:flutter_shareit/screens/send_screen.dart';
 import 'package:flutter_shareit/screens/receive_screen.dart';
 import 'package:flutter_shareit/screens/history_screen.dart';
 import 'package:flutter_shareit/screens/settings_screen.dart';
+import 'package:flutter_shareit/screens/about_screen.dart';
 
 // Layar utama aplikasi yang mengelola semua tampilan halaman.
 class HomePage extends StatefulWidget {
@@ -103,12 +104,20 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.account_circle),
+              leading: const Icon(Icons.account_circle_outlined),
               title: const Text('Pengaturan Akun'),
               selected: _currentPage is SettingsScreen,
               onTap: () {
                 // Menggunakan SettingsScreen yang diimpor.
                 _selectPage(const SettingsScreen(), 'Pengaturan Akun');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded),
+              title: const Text('Tentang Aplikasi'),
+              onTap: () {
+                _selectPage(const AboutScreen(), 'Tentang Aplikasi');
                 Navigator.pop(context);
               },
             ),

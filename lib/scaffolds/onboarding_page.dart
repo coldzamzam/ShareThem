@@ -19,40 +19,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'title': 'Selamat Datang di ShareThem!',
       'description': 'Aplikasi berbagi file super cepat yang menghubungkan Anda dengan teman di sekitar.',
       'icon': null,
-      'lottiePath': 'assets/animations/splash_screen.json', 
+      'lottiePath': 'assets/animations/sharethem_lottie.json',
       'imagePath': null,
       'team': null,
     },
     {
       'title': 'Kirim File Tanpa Internet',
       'description': 'ShareThem menggunakan teknologi Wi-Fi LAN untuk membuat koneksi langsung antar perangkat. Anda dapat mengirim aplikasi, foto, dan file lainnya tanpa kuota internet.',
-      'icon': null, 
+      'icon': null,
       'lottiePath': null,
-      'imagePath': 'assets/images/Screenshot_2025-06-18_215908-removebg-preview.png', 
+      'imagePath': 'assets/images/file_sharing-2.png',
       'team': null,
     },
     {
       'title': 'Fitur Lengkap dan Mudah',
       'description': 'Kirim file dengan mudah, terima file dari teman, dan lihat semua riwayat file yang pernah Anda terima langsung di dalam aplikasi.',
-      'icon': '📂', 
+      'icon': null,
       'lottiePath': null,
-      'imagePath': null,
+      'imagePath': 'assets/images/file_sharing.png',
       'team': null,
     },
-    {
-      'title': 'Tim Pengembang Hebat Kami',
-      'description': null, // Deskripsi digantikan oleh daftar tim
-      'icon': null, 
-      'lottiePath': null,
-      'imagePath': null,
-      'team': [
-        {'name': 'Rifat', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=R'},
-        {'name': 'Sulthan', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=S'},
-        {'name': 'Rafi', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=R'},
-        {'name': 'Aqsa', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=A'},
-        {'name': 'Angel', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=A'},
-      ]
-    }
+    // {
+    //   'title': 'Tim Pengembang Hebat Kami',
+    //   'description': null, // Deskripsi digantikan oleh daftar tim
+    //   'icon': null,
+    //   'lottiePath': null,
+    //   'imagePath': null,
+    //   'team': [
+    //     {'name': 'Rifat', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=R'},
+    //     {'name': 'Sulthan', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=S'},
+    //     {'name': 'Rafi', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=R'},
+    //     {'name': 'Aqsa', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=A'},
+    //     {'name': 'Angel', 'image': 'https://placehold.co/100x100/FFFFFF/333333?text=A'},
+    //   ]
+    // }
   ];
 
   @override
@@ -60,7 +60,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _pageController.dispose();
     super.dispose();
   }
-  
+
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_completed', true);
@@ -72,116 +72,132 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF554DDE),
-              Color(0xFF8E44AD),
-            ],
+      body: Stack(
+        children: [
+          // 1. Gambar Latar Belakang (Layer Paling Bawah)
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/onboarding_pict.png',
+              fit: BoxFit.cover,
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: _onboardingData.length,
-                  onPageChanged: (int page) {
-                    setState(() {
-                      _currentPage = page;
-                    });
-                  },
-                  itemBuilder: (context, index) {
-                    return OnboardingSlide(
-                      icon: _onboardingData[index]['icon'],
-                      imagePath: _onboardingData[index]['imagePath'],
-                      lottiePath: _onboardingData[index]['lottiePath'],
-                      title: _onboardingData[index]['title'],
-                      description: _onboardingData[index]['description'],
-                      team: _onboardingData[index]['team'],
-                    );
-                  },
+
+          // 2. Gradasi Overlay (Layer di Atas Gambar)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter, // Dari bawah
+                  end: Alignment.topCenter,     // Ke atas
+                  colors: [
+                    Colors.black, // Hitam pekat di bawah
+                    Colors.black.withOpacity(0.7), // Hitam agak transparan di tengah
+                    Colors.white.withOpacity(0.0), // Putih transparan di atas
+                  ],
+                  stops: const [0.0, 0.4, 1.0], // Menyesuaikan stop untuk efek gradasi
                 ),
               ),
+            ),
+          ),
 
-              // --- BAGIAN NAVIGASI DIUBAH DI SINI ---
-              
-              // 1. Indikator halaman
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  _onboardingData.length,
-                  (index) => buildDot(index, context),
+          // 3. Konten Onboarding (Layer Paling Atas)
+          SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: _onboardingData.length,
+                    onPageChanged: (int page) {
+                      setState(() {
+                        _currentPage = page;
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      return OnboardingSlide(
+                        icon: _onboardingData[index]['icon'],
+                        imagePath: _onboardingData[index]['imagePath'],
+                        lottiePath: _onboardingData[index]['lottiePath'],
+                        title: _onboardingData[index]['title'],
+                        description: _onboardingData[index]['description'],
+                        team: _onboardingData[index]['team'],
+                      );
+                    },
+                  ),
                 ),
-              ),
-              
-              const SizedBox(height: 50), // Jarak antara indikator dan tombol
 
-              // 2. Baris baru untuk tombol di bagian bawah
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Tombol Kembali (kiri)
-                    Opacity(
-                      opacity: _currentPage > 0 ? 1.0 : 0.0,
-                      child: ElevatedButton(
-                        onPressed: _currentPage > 0 ? () {
-                          _pageController.previousPage(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeInOut,
-                          );
-                        } : null, // Disable onPressed saat tidak terlihat
+                // --- BAGIAN NAVIGASI ---
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    _onboardingData.length,
+                    (index) => buildDot(index, context),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Opacity(
+                        opacity: _currentPage > 0 ? 1.0 : 0.0,
+                        child: ElevatedButton(
+                          onPressed: _currentPage > 0
+                              ? () {
+                                  _pageController.previousPage(
+                                    duration: const Duration(milliseconds: 400),
+                                    curve: Curves.easeInOut,
+                                  );
+                                }
+                              : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.2),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(50),
+                              side: BorderSide(color: Colors.white.withOpacity(0.5)),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          ),
+                          child: const Text('Kembali'),
+                        ),
+                      ),
+
+                      ElevatedButton(
+                        onPressed: () {
+                          if (_currentPage == _onboardingData.length - 1) {
+                            _completeOnboarding();
+                          } else {
+                            _pageController.nextPage(
+                              duration: const Duration(milliseconds: 400),
+                              curve: Curves.easeInOut,
+                            );
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(0.2), // Latar belakang semi-transparan
-                          foregroundColor: Colors.white,
-                          elevation: 0, // Tidak ada bayangan
+                          foregroundColor: const Color(0xFF554DDE),
+                          backgroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(50),
-                            side: BorderSide(color: Colors.white.withOpacity(0.5))
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         ),
-                        child: const Text('Kembali'),
-                      ),
-                    ),
-
-                    // Tombol Lanjut/Mulai (kanan)
-                    ElevatedButton(
-                      onPressed: () {
-                        if (_currentPage == _onboardingData.length - 1) {
-                          _completeOnboarding();
-                        } else {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeInOut,
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: const Color(0xFF554DDE),
-                        backgroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(50),
+                        child: Text(
+                          _currentPage == _onboardingData.length - 1 ? 'Mulai' : 'Lanjut',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)
                       ),
-                      child: Text(
-                        _currentPage == _onboardingData.length - 1 ? 'Mulai' : 'Lanjut',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -202,7 +218,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 class OnboardingSlide extends StatelessWidget {
   final String? icon;
   final String? imagePath;
-  final String? lottiePath; // Parameter baru untuk Lottie
+  final String? lottiePath;
   final String? title;
   final String? description;
   final List<Map<String, String>>? team;
@@ -220,12 +236,11 @@ class OnboardingSlide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(40, 20, 40, 0), // Mengurangi padding bawah
+      padding: const EdgeInsets.fromLTRB(40, 20, 40, 0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          // Menampilkan animasi Lottie, gambar, atau ikon
           if (lottiePath != null)
             Center(
               child: Lottie.asset(
@@ -248,7 +263,6 @@ class OnboardingSlide extends StatelessWidget {
               style: const TextStyle(fontSize: 60),
             ),
           const SizedBox(height: 30),
-          
           if (title != null)
             Text(
               title!,
@@ -259,7 +273,6 @@ class OnboardingSlide extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 15),
-
           if (description != null)
             Text(
               description!,
@@ -272,13 +285,15 @@ class OnboardingSlide extends StatelessWidget {
           else if (team != null)
             Center(
               child: Wrap(
-                spacing: 20.0, // Jarak horizontal antar bubble
-                runSpacing: 20.0, // Jarak vertikal antar baris bubble
+                spacing: 20.0,
+                runSpacing: 20.0,
                 alignment: WrapAlignment.center,
-                children: team!.map((member) => TeamMemberBubble(
-                  name: member['name']!,
-                  imageUrl: member['image']!,
-                )).toList(),
+                children: team!
+                    .map((member) => TeamMemberBubble(
+                          name: member['name']!,
+                          imageUrl: member['image']!,
+                        ))
+                    .toList(),
               ),
             ),
         ],
@@ -304,7 +319,7 @@ class TeamMemberBubble extends StatelessWidget {
         CircleAvatar(
           radius: 40,
           backgroundColor: Colors.white24,
-          backgroundImage: NetworkImage(imageUrl), 
+          backgroundImage: NetworkImage(imageUrl),
         ),
         const SizedBox(height: 8),
         Text(
