@@ -337,382 +337,451 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final bool isWideScreen = MediaQuery.of(context).size.width > 600;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: Colors.white,
-      // --- Changed from 'drawer' to 'endDrawer' ---
-      endDrawer: Drawer( // This makes the drawer appear from the right
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: <Widget>[
-            DrawerHeader(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Text(
-                    'Choose Your Avatar',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _currentUser?.email ?? 'Guest',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
-                itemCount: _availableAvatars.length,
-                itemBuilder: (context, index) {
-                  final avatarPath = _availableAvatars[index];
-                  final isSelected = _userProfile?.photoUrl == avatarPath;
-                  return GestureDetector(
-                    onTap: () => _updateAvatar(avatarPath),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.transparent,
-                          width: isSelected ? 3 : 1,
-                        ),
-                        color: Colors.grey[100],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.asset(
-                          avatarPath,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(Icons.broken_image, size: 40, color: Colors.red);
-                          },
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+    return Container( // Wrapper Container untuk background gradient halaman
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFF9F5FF), Color(0xFFEEEBFF)], // Background yang Anda pilih
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              // Padding(
-              //   padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 15, 16, 15),
-              //   child: Row(
-              //     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              //     children: [
-              //       const Text(
-              //         "Settings",
-              //         style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              //       ),
-              //       if (widget.onClose != null)
-              //         IconButton(
-              //           icon: const Icon(Icons.close, size: 30),
-              //           onPressed: widget.onClose,
-              //         ),
-              //     ],
-              //   ),
-              // ),
-              // const SizedBox(height: 10),
-
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(horizontal: isWideScreen ? 100.0 : 16.0),
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: Colors.transparent,
+        endDrawer: Drawer( // This makes the drawer appear from the right
+          child: Container( // Tambahkan Container untuk background gradien di Drawer
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFEEEBFF), Color(0xFFF9F5FF)], // Gradien terbalik atau disesuaikan untuk Drawer
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: <Widget>[
+                DrawerHeader(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      const SizedBox(height: 20),
-                      _buildProfilePictureSection(),
-                      const SizedBox(height: 10),
-                      _currentUser != null
-                          ? Text(
-                              _userProfile?.username ??
-                                  _currentUser!.email ??
-                                  'No Username/Email',
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                      _currentUser != null
-                          ? Text(
-                              _currentUser!.email ?? 'No Email',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey[600],
-                              ),
-                            )
-                          : const SizedBox(height: 10),
-                      const SizedBox(height: 30),
-
-                      if (_currentUser != null)
-                        Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Profile Information',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.secondary,
-                                ),
-                              ),
-                              const Divider(height: 20, thickness: 1.5, color: Colors.grey),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _usernameController,
-                                decoration: InputDecoration(
-                                  labelText: 'Username',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                  prefixIcon: const Icon(Icons.person),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Username cannot be empty';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _phoneNumberController,
-                                keyboardType: TextInputType.phone,
-                                decoration: InputDecoration(
-                                  labelText: 'Phone Number',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                  prefixIcon: const Icon(Icons.phone),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _addressController,
-                                keyboardType: TextInputType.streetAddress,
-                                maxLines: 3,
-                                decoration: InputDecoration(
-                                  labelText: 'Address',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                  prefixIcon: const Icon(Icons.location_on),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                              ),
-// Kode Tombol Update Profile versi kecil
-                              const SizedBox(height: 24),
-                              Align(
-                                alignment: Alignment.center, // Posisikan ke tengah
-                                child: GestureDetector(
-                                  onTap: _updateProfile,
-                                  child: Container(
-                                    constraints: const BoxConstraints(maxWidth: 250), // Lebar maksimal
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
-                                      gradient: const LinearGradient(
-                                        colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
-                                        Icon(Icons.save, color: Colors.white, size: 18),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Update Profile',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 30),
-
-                              if (_currentUser != null && _currentUser!.providerData.any((info) => info.providerId == 'password'))
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Change Password',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context).colorScheme.secondary,
-                                      ),
-                                    ),
-                                    const Divider(height: 20, thickness: 1.5, color: Colors.grey),
-                                    const SizedBox(height: 16),
-                                    TextFormField(
-                                      controller: _currentPasswordController,
-                                      obscureText: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'Current Password',
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                        prefixIcon: const Icon(Icons.lock_open),
-                                        filled: true,
-                                        fillColor: Colors.grey[50],
-                                      ),
-                                      validator: (value) {
-                                        if (value == null || value.isEmpty) {
-                                          return 'Please enter your current password';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextFormField(
-                                      controller: _newPasswordController,
-                                      obscureText: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'New Password',
-                                        hintText: 'Minimum 6 characters',
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                        prefixIcon: const Icon(Icons.lock),
-                                        filled: true,
-                                        fillColor: Colors.grey[50],
-                                      ),
-                                      validator: (value) {
-                                        if (value == null || value.isEmpty) {
-                                          return 'Please enter a new password';
-                                        }
-                                        if (value.length < 6) {
-                                          return 'Password must be at least 6 characters';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                    const SizedBox(height: 24),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton.icon(
-                                        onPressed: _changePassword,
-                                        icon: const Icon(Icons.vpn_key),
-                                        label: const Text('Change Password'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFFD2B4DE),
-                                          foregroundColor: Colors.black87,
-                                          padding: const EdgeInsets.symmetric(vertical: 16),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          textStyle: const TextStyle(fontSize: 16),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              const SizedBox(height: 30),
-                            ],
-                          ),
-                        ),
-                      ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: 250),
-                        child: Column(
-                          children: [
-                            GestureDetector(
-                              onTap: _handleAuthButtonPress,
-                              child: Container(
-                                width: 115,
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFE5484A), Color(0xFFCD2427)],
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10), // disesuaikan agar serasi
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    _currentUser != null ? "Logout" : "Login",
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                      const Text(
+                        'Pilih Avatar',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-
-                      SizedBox(
-                          height: MediaQuery.of(context).padding.bottom > 0
-                              ? MediaQuery.of(context).padding.bottom
-                              : 20),
+                      const SizedBox(height: 8),
+                      Text(
+                        _currentUser?.email ?? 'Guest',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 15,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: _availableAvatars.length,
+                    itemBuilder: (context, index) {
+                      final avatarPath = _availableAvatars[index];
+                      final isSelected = _userProfile?.photoUrl == avatarPath;
+                      return GestureDetector(
+                        onTap: () => _updateAvatar(avatarPath),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(50),
+                            border: Border.all(
+                              color: isSelected
+                                  ? const Color(0xFF554DDE) // Border primaryDark saat selected
+                                  : Colors.transparent,
+                              width: isSelected ? 4 : 1,
+                            ),
+                            color: Colors.white,
+                            boxShadow: [
+                              BoxShadow(
+                                color: isSelected ? const Color(0xFF554DDE).withOpacity(0.3) : Colors.grey.withOpacity(0.2),
+                                blurRadius: 5,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              avatarPath,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(Icons.broken_image, size: 40, color: Colors.red);
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-          if (_showNotification && _notificationMessage != null && _notificationColor != null)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 20.0,
-              left: 20.0,
-              right: 20.0,
-              child: Material(
-                color: _notificationColor,
-                elevation: 6.0,
-                borderRadius: BorderRadius.circular(10),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  child: Text(
-                    _notificationMessage!,
-                    style: const TextStyle(color: Colors.white),
-                    textAlign: TextAlign.center,
+        ),
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(horizontal: isWideScreen ? 100.0 : 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 40),
+                        _buildProfilePictureSection(),
+                        const SizedBox(height: 20),
+                        _currentUser != null
+                            ? Text(
+                                _userProfile?.username ??
+                                    _currentUser!.email ??
+                                    'No Username/Email',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF333333),
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                        _currentUser != null
+                            ? Text(
+                                _currentUser!.email ?? 'No Email',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[700],
+                                ),
+                              )
+                            : const SizedBox(height: 10),
+                        const SizedBox(height: 40),
+
+                        if (_currentUser != null)
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Profile Information',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF554DDE), // Warna dari primaryDark
+                                  ),
+                                ),
+                                const Divider(height: 30, thickness: 2, color: Color(0xFFAA88CC)), // Divider lebih tebal & warna primaryLight
+                                const SizedBox(height: 20),
+                                TextFormField(
+                                  controller: _usernameController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Username',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                      borderSide: const BorderSide(color: Color(0xFFAA88CC), width: 1.5),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                      borderSide: const BorderSide(color: Color(0xFF554DDE), width: 2),
+                                    ),
+                                    prefixIcon: const Icon(Icons.person, color: Color(0xFFAA88CC)), // Icon dengan warna primaryLight
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    labelStyle: TextStyle(color: Colors.grey[700]),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Username cannot be empty';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 20),
+                                TextFormField(
+                                  controller: _phoneNumberController,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: InputDecoration(
+                                    labelText: 'Phone Number',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                      borderSide: const BorderSide(color: Color(0xFFAA88CC), width: 1.5),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                      borderSide: const BorderSide(color: Color(0xFF554DDE), width: 2),
+                                    ),
+                                    prefixIcon: const Icon(Icons.phone, color: Color(0xFFAA88CC)),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    labelStyle: TextStyle(color: Colors.grey[700]),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                TextFormField(
+                                  controller: _addressController,
+                                  keyboardType: TextInputType.streetAddress,
+                                  maxLines: 3,
+                                  decoration: InputDecoration(
+                                    labelText: 'Address',
+                                    alignLabelWithHint: true,
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                      borderSide: const BorderSide(color: Color(0xFFAA88CC), width: 1.5),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                      borderSide: const BorderSide(color: Color(0xFF554DDE), width: 2),
+                                    ),
+                                    prefixIcon: const Icon(Icons.location_on, color: Color(0xFFAA88CC)),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    labelStyle: TextStyle(color: Colors.grey[700]),
+                                  ),
+                                ),
+                                const SizedBox(height: 30),
+
+                                Align(
+                                  alignment: Alignment.center,
+                                  child: GestureDetector(
+                                    onTap: _updateProfile,
+                                    child: Container(
+                                      constraints: const BoxConstraints(maxWidth: 300),
+                                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 15),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(30),
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF554DDE).withOpacity(0.4),
+                                            blurRadius: 2,
+                                            offset: const Offset(0, 0),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: const [
+                                          Icon(Icons.save, color: Colors.white, size: 20),
+                                          SizedBox(width: 10),
+                                          Text(
+                                            'Update Profile',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 40),
+
+                                if (_currentUser != null && _currentUser!.providerData.any((info) => info.providerId == 'password'))
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Change Password',
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF554DDE),
+                                        ),
+                                      ),
+                                      const Divider(height: 30, thickness: 2, color: Color(0xFFAA88CC)),
+                                      const SizedBox(height: 20),
+                                      TextFormField(
+                                        controller: _currentPasswordController,
+                                        obscureText: true,
+                                        decoration: InputDecoration(
+                                          labelText: 'Current Password',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(15),
+                                            borderSide: const BorderSide(color: Color(0xFFAA88CC), width: 1.5),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(15),
+                                            borderSide: const BorderSide(color: Color(0xFF554DDE), width: 2),
+                                          ),
+                                          prefixIcon: const Icon(Icons.lock_open, color: Color(0xFFAA88CC)),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          labelStyle: TextStyle(color: Colors.grey[700]),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'Please enter your current password';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 20),
+                                      TextFormField(
+                                        controller: _newPasswordController,
+                                        obscureText: true,
+                                        decoration: InputDecoration(
+                                          labelText: 'New Password',
+                                          hintText: 'Minimum 6 characters',
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(15),
+                                            borderSide: const BorderSide(color: Color(0xFFAA88CC), width: 1.5),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(15),
+                                            borderSide: const BorderSide(color: Color(0xFF554DDE), width: 2),
+                                          ),
+                                          prefixIcon: const Icon(Icons.lock, color: Color(0xFFAA88CC)),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          labelStyle: TextStyle(color: Colors.grey[700]),
+                                        ),
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'Please enter a new password';
+                                          }
+                                          if (value.length < 6) {
+                                            return 'Password must be at least 6 characters';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 30),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          onPressed: _changePassword,
+                                          icon: const Icon(Icons.vpn_key, color: Colors.white),
+                                          label: const Text('Change Password', style: TextStyle(color: Colors.white)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF554DDE), // Warna utama primaryDark
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(15),
+                                            ),
+                                            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                            elevation: 0,
+                                            shadowColor: const Color(0xFF554DDE).withOpacity(0.4), // Shadow dari primaryDark
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                const SizedBox(height: 40),
+                              ],
+                            ),
+                          ),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 300),
+                          child: Column(
+                            children: [
+                              GestureDetector(
+                                onTap: _handleAuthButtonPress,
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 15),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFE5484A), Color(0xFFCD2427)],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(30),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFCD2427).withOpacity(0.4),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 0),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      _currentUser != null ? "Logout" : "Login",
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        SizedBox(
+                            height: MediaQuery.of(context).padding.bottom > 0
+                                ? MediaQuery.of(context).padding.bottom + 20
+                                : 40),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_showNotification && _notificationMessage != null && _notificationColor != null)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  height: _showNotification ? MediaQuery.of(context).padding.top + 60.0 : 0,
+                  color: _notificationColor,
+                  alignment: Alignment.center,
+                  child: Padding(
+                    padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 10.0, left: 20, right: 20),
+                    child: Text(
+                      _notificationMessage!,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -729,16 +798,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Widget imageWidget;
     if (_isUpdatingAvatar) {
       imageWidget = const SizedBox(
-        width: 50,
-        height: 50,
-        child: CircularProgressIndicator(color: Colors.white),
+        width: 60,
+        height: 60,
+        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 5),
       );
     } else if (currentPhotoPath != null && currentPhotoPath.startsWith('assets/')) {
       imageWidget = ClipOval(
         child: Image.asset(
           currentPhotoPath,
-          width: 150,
-          height: 150,
+          width: 160,
+          height: 160,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             print('Error loading asset image $currentPhotoPath: $error');
@@ -750,8 +819,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       imageWidget = ClipOval(
         child: Image.network(
           currentPhotoPath,
-          width: 150,
-          height: 150,
+          width: 160,
+          height: 160,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             print('Error loading network image $currentPhotoPath: $error');
@@ -764,27 +833,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return GestureDetector(
-      // --- Changed to openEndDrawer() ---
-      onTap: _isUpdatingAvatar ? null : () => _scaffoldKey.currentState?.openEndDrawer(), // Open from right
+      onTap: _isUpdatingAvatar ? null : () => _scaffoldKey.currentState?.openEndDrawer(),
       child: Stack(
         alignment: Alignment.center,
         children: [
           Container(
-            width: 150,
-            height: 150,
+            width: 160,
+            height: 160,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: const LinearGradient(
-                colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                colors: [Color(0xFFAA88CC), Color(0xFF554DDE)], // Gradien primary color
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  spreadRadius: 2,
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+                  color: const Color(0xFF554DDE).withOpacity(0.3), // Shadow dari primaryDark
+                  spreadRadius: 1,
+                  blurRadius: 6,
+                  offset: const Offset(0, 0),
                 ),
               ],
             ),
@@ -797,18 +865,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Container(
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
+                    colors: [Color(0xFFAA88CC), Color(0xFF554DDE)], // Gradien primary color
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF554DDE).withOpacity(0.3),
+                      blurRadius: 5,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 child: const Icon(
                   Icons.camera_alt,
                   color: Colors.white,
-                  size: 24,
+                  size: 26,
                 ),
               ),
             ),
@@ -821,8 +896,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return initial != null
         ? Text(
       initial,
-      style: const TextStyle(fontSize: 60, color: Colors.white),
+      style: const TextStyle(fontSize: 70, color: Colors.white, fontWeight: FontWeight.bold),
     )
-        : const Icon(Icons.person, size: 100, color: Colors.white);
+        : const Icon(Icons.person, size: 120, color: Colors.white);
   }
 }

@@ -40,129 +40,120 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final bool isWideScreen = MediaQuery.of(context).size.width > 1000.0;
 
-    return Scaffold(
-      appBar: AppBar(
-        // Hapus backgroundColor agar tidak menutupi gradient di flexibleSpace
-        // backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(
-          _currentTitle, // Judul AppBar dinamis
-          style: TextStyle(color: Theme.of(context).colorScheme.onPrimary),
-        ),
-        iconTheme: IconThemeData(
-          color: Theme.of(context).colorScheme.onPrimary,
-        ),
+    // Definisi warna utama aplikasi
+    const Color primaryLight = Color(0xFFAA88CC); // Ungu muda keunguan
+    const Color primaryDark = Color(0xFF554DDE);  // Biru tua keunguan
+    // Warna background yang Anda pilih
+    const Color backgroundStart = Color(0xFFF9F5FF); // Lavender muda
+    const Color backgroundEnd = Color(0xFFEEEBFF);   // Ungu sangat pucat
 
-        // Gunakan flexibleSpace untuk menempatkan widget di belakang AppBar
-        flexibleSpace: Container(
-          // Di sini kita tempatkan dekorasi gradient Anda
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
-            ),
+    return Container( // Wrapper Container untuk background gradient halaman
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [backgroundStart, backgroundEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent, // Penting agar background Container terlihat
+        appBar: AppBar(
+          title: Text(
+            _currentTitle, // Judul AppBar dinamis
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), // Warna teks putih, bold
           ),
-        ),
-      ),
-      // Drawer untuk navigasi ke halaman sekunder.
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-                  colors: [Color(0xFFAA88CC), Color(0xFF554DDE)],
-                ),
+          iconTheme: const IconThemeData(
+            color: Colors.white, // Warna ikon putih
+          ),
+          elevation: 0, // Penting: Set elevation AppBar menjadi 0
+          backgroundColor: Colors.transparent, // Transparan agar shadow dari flexibleSpace terlihat
+
+          // Gunakan flexibleSpace untuk menempatkan widget di belakang AppBar
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [primaryLight, primaryDark], // Gradient warna utama aplikasi
               ),
-              child: const Text(
-                'Menu',
-                style: TextStyle(color: Colors.white, fontSize: 24),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Home'),
-              selected: _currentPage is SendScreen,
-              onTap: () {
-                // Menggunakan SendScreen yang diimpor.
-                _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
-                Navigator.pop(context); // Tutup drawer
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.history),
-              title: const Text('Riwayat'),
-              selected: _currentPage is HistoryScreen,
-              onTap: () {
-                // Menggunakan HistoryScreen yang diimpor.
-                _selectPage(const HistoryScreen(), 'Riwayat');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.account_circle_outlined),
-              title: const Text('Pengaturan Akun'),
-              selected: _currentPage is SettingsScreen,
-              onTap: () {
-                // Menggunakan SettingsScreen yang diimpor.
-                _selectPage(const SettingsScreen(), 'Pengaturan Akun');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline_rounded),
-              title: const Text('Tentang Aplikasi'),
-              onTap: () {
-                _selectPage(const AboutScreen(), 'Tentang Aplikasi');
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
-      body: Row(
-        children: [
-          // Render NavigationRail untuk layar lebar.
-          if (isWideScreen)
-            NavigationRail(
-              selectedIndex: _mainNavIndex,
-              onDestinationSelected: (index) {
-                if (index == 0) {
-                  _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
-                } else if (index == 1) {
-                  _selectPage(const ReceiveScreen(), 'Terima', navIndex: 1);
-                }
-              },
-              labelType: NavigationRailLabelType.all,
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.upload_outlined),
-                  selectedIcon: Icon(Icons.upload),
-                  label: Text('Kirim'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.download_outlined),
-                  selectedIcon: Icon(Icons.download),
-                  label: Text('Terima'),
+              boxShadow: [
+                BoxShadow(
+                  color: primaryDark.withOpacity(0.4), // Warna shadow dari primaryDark
+                  blurRadius: 10.0, // Blur radius lebih besar
+                  spreadRadius: 0.0,
+                  offset: const Offset(0, 5), // Offset shadow lebih besar
                 ),
               ],
             ),
-
-          if (isWideScreen) const VerticalDivider(thickness: 1, width: 1),
-
-          // Konten utama yang berubah secara dinamis.
-          Expanded(child: _currentPage),
-        ],
-      ),
-      // Render BottomNavigationBar untuk layar sempit.
-      bottomNavigationBar:
-          isWideScreen
-              ? null
-              : NavigationBar(
+          ),
+        ),
+        // Drawer untuk navigasi ke halaman sekunder.
+        drawer: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [primaryLight, primaryDark], // Konsisten dengan AppBar
+                  ),
+                ),
+                child: const Text(
+                  'Menu',
+                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.home, color: _currentPage is SendScreen ? primaryDark : Colors.grey[700]), // Warna icon sesuai selected
+                title: Text('Home', style: TextStyle(color: _currentPage is SendScreen ? primaryDark : Colors.grey[800])),
+                selected: _currentPage is SendScreen,
+                selectedTileColor: primaryLight.withOpacity(0.1), // Warna latar belakang saat selected
+                onTap: () {
+                  _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
+                  Navigator.pop(context); // Tutup drawer
+                },
+              ),
+              Divider(height: 1, thickness: 1, color: Colors.grey[300]), // Divider yang lebih halus
+              ListTile(
+                leading: Icon(Icons.history, color: _currentPage is HistoryScreen ? primaryDark : Colors.grey[700]),
+                title: Text('Riwayat', style: TextStyle(color: _currentPage is HistoryScreen ? primaryDark : Colors.grey[800])),
+                selected: _currentPage is HistoryScreen,
+                selectedTileColor: primaryLight.withOpacity(0.1),
+                onTap: () {
+                  _selectPage(const HistoryScreen(), 'Riwayat');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.account_circle_outlined, color: _currentPage is SettingsScreen ? primaryDark : Colors.grey[700]),
+                title: Text('Pengaturan Akun', style: TextStyle(color: _currentPage is SettingsScreen ? primaryDark : Colors.grey[800])),
+                selected: _currentPage is SettingsScreen,
+                selectedTileColor: primaryLight.withOpacity(0.1),
+                onTap: () {
+                  _selectPage(const SettingsScreen(), 'Pengaturan Akun');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.info_outline_rounded, color: _currentPage is AboutScreen ? primaryDark : Colors.grey[700]),
+                title: Text('Tentang Aplikasi', style: TextStyle(color: _currentPage is AboutScreen ? primaryDark : Colors.grey[800])),
+                selected: _currentPage is AboutScreen,
+                selectedTileColor: primaryLight.withOpacity(0.1),
+                onTap: () {
+                  _selectPage(const AboutScreen(), 'Tentang Aplikasi');
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        ),
+        body: Row(
+          children: [
+            // Render NavigationRail untuk layar lebar.
+            if (isWideScreen)
+              NavigationRail(
                 selectedIndex: _mainNavIndex,
                 onDestinationSelected: (index) {
                   if (index == 0) {
@@ -171,19 +162,65 @@ class _HomePageState extends State<HomePage> {
                     _selectPage(const ReceiveScreen(), 'Terima', navIndex: 1);
                   }
                 },
+                labelType: NavigationRailLabelType.all,
+                backgroundColor: backgroundStart, // Background NavigationRail
+                indicatorColor: primaryLight.withOpacity(0.2), // Warna indikator saat selected
+                selectedIconTheme: const IconThemeData(color: primaryDark), // Icon selected
+                unselectedIconTheme: IconThemeData(color: Colors.grey[600]), // Icon unselected
+                selectedLabelTextStyle: const TextStyle(color: primaryDark, fontWeight: FontWeight.bold), // Label selected
+                unselectedLabelTextStyle: TextStyle(color: Colors.grey[700]), // Label unselected
+                minWidth: 72, // Lebar minimum NavigationRail
                 destinations: const [
-                  NavigationDestination(
+                  NavigationRailDestination(
                     icon: Icon(Icons.upload_outlined),
                     selectedIcon: Icon(Icons.upload),
-                    label: 'Kirim',
+                    label: Text('Kirim'),
                   ),
-                  NavigationDestination(
+                  NavigationRailDestination(
                     icon: Icon(Icons.download_outlined),
                     selectedIcon: Icon(Icons.download),
-                    label: 'Terima',
+                    label: Text('Terima'),
                   ),
                 ],
               ),
+
+            if (isWideScreen) const VerticalDivider(thickness: 1, width: 1, color: Colors.grey), // Garis pemisah lebih kontras
+
+            // Konten utama yang berubah secara dinamis.
+            Expanded(child: _currentPage),
+          ],
+        ),
+        // Render BottomNavigationBar untuk layar sempit.
+        bottomNavigationBar:
+            isWideScreen
+                ? null
+                : NavigationBar(
+                    selectedIndex: _mainNavIndex,
+                    onDestinationSelected: (index) {
+                      if (index == 0) {
+                        _selectPage(const SendScreen(), 'Kirim', navIndex: 0);
+                      } else if (index == 1) {
+                        _selectPage(const ReceiveScreen(), 'Terima', navIndex: 1);
+                      }
+                    },
+                    backgroundColor: backgroundStart, // Background NavigationBar
+                    indicatorColor: primaryLight.withOpacity(0.2), // Warna indikator saat selected
+                    shadowColor: primaryDark.withOpacity(0.1), // Shadow
+                    elevation: 5, // Elevation
+                    destinations: [
+                      NavigationDestination(
+                        icon: Icon(Icons.upload_outlined, color: _mainNavIndex == 0 ? primaryDark : Colors.grey[600]),
+                        selectedIcon: const Icon(Icons.upload, color: primaryDark),
+                        label: 'Kirim',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.download_outlined, color: _mainNavIndex == 1 ? primaryDark : Colors.grey[600]),
+                        selectedIcon: const Icon(Icons.download, color: primaryDark),
+                        label: 'Terima',
+                      ),
+                    ],
+                  ),
+      ),
     );
   }
 }

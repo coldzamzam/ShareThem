@@ -8,7 +8,6 @@ import 'package:path/path.dart' as p;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -174,105 +173,205 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration( // Made const as hintStyle is const
-                  hintText: 'Search file name...',
-                  border: UnderlineInputBorder(),
-                  // Changed border color to match the app theme
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.black54), // Changed focused border color to black
-                  ),
-                  hintStyle: TextStyle(color: Colors.black54), // Changed hint text color to black54
-                ),
-                style: const TextStyle(color: Colors.black, fontSize: 18.0), // Changed input text color to black
-                cursorColor: Colors.black, // Changed cursor color to black
-              )
-            : const Text('Saved Files History'),
-        actions: [
-          // Search icon to toggle search bar visibility
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) {
-                  _searchController.clear(); // Clear search and re-filter
-                }
-              });
-            },
-            tooltip: _isSearching ? 'Close Search' : 'Search Files',
-          ),
-          // Refresh button to reload the file list
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadSavedFiles,
-            tooltip: 'Refresh',
-          ),
-        ],
+    // Warna utama aplikasi
+    const Color primaryLight = Color(0xFFAA88CC);
+    const Color primaryDark = Color(0xFF554DDE);
+    // Warna background
+    const Color backgroundStart = Color(0xFFF9F5FF);
+    const Color backgroundEnd = Color(0xFFEEEBFF);
+
+    return Container( // Wrapper Container untuk background gradient halaman
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [backgroundStart, backgroundEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
-      body: _auth.currentUser == null
-          ? const Center(
-              child: Text(
-                "Please log in to view your saved files history.",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+      child: Scaffold(
+        backgroundColor: Colors.transparent, // Penting agar background Container terlihat
+        appBar: AppBar(
+          title: _isSearching
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Search file name...',
+                    hintStyle: TextStyle(color: Colors.black.withOpacity(0.7)), // Warna hint yang disesuaikan
+                    border: const UnderlineInputBorder( // Menggunakan UnderlineInputBorder untuk border default
+                      borderSide: BorderSide(color: Colors.black87, width: 1.0), // Warna border default
+                    ),
+                    focusedBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.black54, width: 2.0), // Warna border saat focused
+                    ),
+                    enabledBorder: const UnderlineInputBorder( // Warna border saat enabled
+                      borderSide: BorderSide(color: Colors.black26),
+                    ),
+                  ),
+                  style: const TextStyle(color: Colors.black, fontSize: 18.0), // Warna teks input putih
+                  cursorColor: Colors.white, // Warna kursor putih
+                )
+              : const Text(
+                  'Saved Files History',
+                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600), // Judul AppBar
+                ),
+          actions: [
+            IconButton(
+              icon: Icon(
+                _isSearching ? Icons.close : Icons.search,
+                color: Colors.black, // Warna ikon hitam
               ),
-            )
-          : FutureBuilder<List<Map<String, String>>>(
-              future: _allSavedFilesFuture, // Use the future that fetches all files
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _searchController.clear();
+                  }
+                });
+              },
+              tooltip: _isSearching ? 'Close Search' : 'Search Files',
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.black), // Warna ikon putih
+              onPressed: _loadSavedFiles,
+              tooltip: 'Refresh',
+            ),
+          ],
+          elevation: 0, // Penting: Set elevation AppBar menjadi 0
+          backgroundColor: Colors.transparent, // Transparan agar shadow dari flexibleSpace terlihat
+          
+        ),
+        body: _auth.currentUser == null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0), // Padding lebih besar
+                  child: Text(
+                    "Please log in to view your saved files history.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18, // Ukuran font lebih besar
+                      fontWeight: FontWeight.w600,
+                      color: primaryDark.withOpacity(0.8), // Warna teks dari primaryDark
+                    ),
+                  ),
+                ),
+              )
+            : FutureBuilder<List<Map<String, String>>>(
+                future: _allSavedFilesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(primaryDark), // Warna dari primaryDark
+                        strokeWidth: 5, // Ketebalan progress bar
+                      ),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Text(
+                          "Error loading files: ${snapshot.error}",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    );
+                  }
+                  // Check if data is loaded and if filtered list is empty or not
+                  if (snapshot.hasData && _filteredSavedFiles.isNotEmpty) {
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0), // Padding listview
+                      itemCount: _filteredSavedFiles.length,
+                      itemBuilder: (context, index) {
+                        final file = _filteredSavedFiles[index];
+                        final fileSize = int.tryParse(file['size'] ?? '0') ?? 0;
+                        final String modifiedDate = file['modified'] != null
+                            ? DateTime.tryParse(file['modified']!)?.toLocal().toString().split(' ')[0] ?? ''
+                            : ''; // Format tanggal
+
+                        return Card( // Menggunakan Card untuk setiap item
+                          margin: const EdgeInsets.symmetric(vertical: 5.0), // Margin antar card
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15.0), // Sudut Card lebih membulat
+                          ),
+                          elevation: 5, // Elevasi untuk efek floating
+                          shadowColor: primaryLight.withOpacity(0.1), // Shadow dari primaryLight
+                          child: Container( // Tambahkan Container untuk padding konten dalam Card
+                            decoration: BoxDecoration(
+                              // Tambahkan border di sini jika diperlukan, atau biarkan Card yang menangani
+                              borderRadius: BorderRadius.circular(15.0),
+                              color: Colors.white, // Background putih untuk setiap item
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5), // Padding konten ListTile
+                              leading: CircleAvatar( // CircleAvatar untuk ikon
+                                backgroundColor: primaryLight.withOpacity(0.15), // Background lingkaran dari primaryLight
+                                child: const Icon(Icons.insert_drive_file, color: primaryDark, size: 28), // Ikon file dari primaryDark
+                              ),
+                              title: Text(
+                                file['name']!,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700, // Lebih tebal
+                                  fontSize: 17,
+                                  color: Color(0xFF333333), // Warna teks lebih gelap
+                                ),
+                                overflow: TextOverflow.ellipsis, // Menangani nama file panjang
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 4), // Spasi kecil
+                                  Text(
+                                    'Size: ${fileSizeToHuman(fileSize)}',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (modifiedDate.isNotEmpty)
+                                    Text(
+                                      'Last Modified: $modifiedDate',
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              trailing: IconButton( // Mengubah icon open_in_new menjadi IconButton
+                                icon: const Icon(Icons.open_in_new, color: primaryLight), // Icon dengan primaryLight
+                                onPressed: () => _openFile(file['path']!, file['name']!),
+                                tooltip: 'Open file',
+                              ),
+                              onTap: () => _openFile(file['path']!, file['name']!), // Tap pada ListTile juga membuka file
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  }
+                  // If there's no data or filtered list is empty
                   return Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(24.0),
                       child: Text(
-                        "Error loading files: ${snapshot.error}",
+                        _searchController.text.isNotEmpty
+                            ? "No files found matching '${_searchController.text}'."
+                            : "No saved files found for this account.",
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: primaryDark.withOpacity(0.8),
+                        ),
                       ),
                     ),
                   );
-                }
-                // Check if data is loaded and if filtered list is empty or not
-                if (snapshot.hasData && _filteredSavedFiles.isNotEmpty) {
-                  return ListView.builder(
-                    itemCount: _filteredSavedFiles.length,
-                    itemBuilder: (context, index) {
-                      final file = _filteredSavedFiles[index];
-                      final fileSize = int.tryParse(file['size'] ?? '0') ?? 0;
-                      return ListTile(
-                        leading: const Icon(Icons.insert_drive_file, color: Colors.blueGrey),
-                        title: Text(file['name']!),
-                        subtitle: Text(
-                            'Size: ${fileSizeToHuman(fileSize)} - Path: ${file['path']!}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                        trailing: const Icon(Icons.open_in_new),
-                        onTap: () => _openFile(file['path']!, file['name']!),
-                      );
-                    },
-                  );
-                }
-                // If there's no data or filtered list is empty
-                return Center(
-                  child: Text(
-                    _searchController.text.isNotEmpty
-                        ? "No files found matching '${_searchController.text}'."
-                        : "No saved files found for this account.",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                );
-              },
-            ),
+                },
+              ),
+      ),
     );
   }
 }
