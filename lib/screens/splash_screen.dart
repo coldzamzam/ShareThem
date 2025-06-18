@@ -1,7 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,18 +15,34 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    // Delay splash screen for 6 seconds
-    Future.delayed(const Duration(seconds: 6), () {
-      // Check if a user is currently logged in
-      User? user = FirebaseAuth.instance.currentUser;
+    // Logika navigasi dimulai setelah jeda
+    Future.delayed(const Duration(seconds: 6), () async {
+      // Pengecekan 'mounted' penting untuk mencegah error jika user
+      // meninggalkan screen sebelum navigasi terjadi.
+      if (!mounted) return;
 
-      if (user != null) {
-        // User is logged in, navigate to home page
-        Navigator.pushReplacementNamed(context, '/home');
+      // --- PERUBAHAN DIMULAI DI SINI ---
+
+      // 1. Periksa apakah onboarding sudah pernah selesai.
+      final prefs = await SharedPreferences.getInstance();
+      final bool onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+
+      // 2. Tentukan halaman tujuan berdasarkan status onboarding dan login.
+      if (onboardingCompleted) {
+        // Jika onboarding sudah selesai, lanjutkan ke logika login seperti semula.
+        User? user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          // Pengguna sudah login, arahkan ke home.
+          Navigator.pushReplacementNamed(context, '/home');
+        } else {
+          // Pengguna belum login, arahkan ke login.
+          Navigator.pushReplacementNamed(context, '/login');
+        }
       } else {
-        // No user is logged in, navigate to login page
-        Navigator.pushReplacementNamed(context, '/login');
+        // Jika onboarding belum pernah selesai, arahkan ke halaman onboarding.
+        Navigator.pushReplacementNamed(context, '/onboarding');
       }
+      // --- PERUBAHAN SELESAI ---
     });
   }
   
